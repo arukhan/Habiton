@@ -1,0 +1,92 @@
+
+"use client";
+
+import Image from "next/image";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+import { useHabiton } from "@/context/AppContext";
+import { Navigation } from "./Navigation";
+import { Penguin } from "./Penguin";
+
+interface ShellProps {
+  children: React.ReactNode;
+  title?: string;
+  navigation?: boolean;
+}
+
+export function Shell({
+  children,
+  title = "HABITON ✦",
+  navigation = true,
+}: ShellProps) {
+  const { user, loading, error } = useHabiton();
+  const router = useRouter();
+
+  // Redirect unauthenticated users to Login
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="full-loading">
+        <Penguin mood="thinking" />
+        <h2>Getting your quests ready...</h2>
+      </div>
+    );
+  }
+
+  // Redirecting to Login
+  if (!user) {
+    return (
+      <div className="full-loading">
+        Redirecting to login...
+      </div>
+    );
+  }
+
+  return (
+    <main className="site-shell">
+      <div className="app-frame">
+        {/* Global Header */}
+        <header className="topbar">
+          <span>{title}</span>
+
+          <span className="top-avatar">
+            <Image
+              src="/penguin-icon.png"
+              alt="Habiton Penguin"
+              width={48}
+              height={48}
+              className="top-avatar-image"
+              priority
+            />
+          </span>
+        </header>
+
+        {/* Main Content */}
+        <div className="content">
+
+          {error && (
+            <div role="alert" className="error">
+              {error}
+            </div>
+          )}
+
+          {children}
+        </div>
+
+        {/* Bottom Navigation */}
+        {navigation && <Navigation />}
+      </div>
+
+      <p className="desktop-tip">
+        Habiton · A little, every day. 🌱
+      </p>
+    </main>
+  );
+}

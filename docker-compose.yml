@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: habiton
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-habiton_local_only}
+      POSTGRES_DB: habiton
+    volumes:
+      - habiton_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U habiton -d habiton"]
+      interval: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://habiton:${POSTGRES_PASSWORD:-habiton_local_only}@db:5432/habiton?sslmode=disable
+      PORT: "8080"
+      COOKIE_SECURE: "false"
+      DEMO_MODE: ${DEMO_MODE:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      AMPLITUDE_API_KEY: ${AMPLITUDE_API_KEY:-}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_DEMO_MODE: ${DEMO_MODE:-false}
+    environment:
+      BACKEND_URL: http://backend:8080
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+volumes:
+  habiton_data:

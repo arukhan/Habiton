@@ -1,0 +1,274 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"math"
+	"strings"
+	"time"
+)
+
+func clamp(n, min, max int) int {
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
+}
+
+func template(category, reason string, minutes int) (string, string, string) {
+	m := clamp(int(math.Ceil(float64(minutes)/6)), 2, 10)
+	step := clamp(int(math.Ceil(float64(minutes)/2)), m+1, minutes)
+	if minutes <= 3 {
+		m = 1
+		step = minutes
+	}
+	if step > minutes {
+		step = minutes
+	}
+	var micro, stepText string
+	switch strings.ToLower(category) {
+	case "reading":
+		micro = "Read for %d minutes and write one sentence about it."
+		stepText = "Read for %d minutes and note one idea."
+	case "fitness", "exercise", "health":
+		micro = "Move gently for %d minutes at a comfortable pace."
+		stepText = "Do %d minutes of comfortable movement."
+	case "mindfulness", "rest":
+		micro = "Take %d minutes to breathe, reflect, or rest."
+		stepText = "Spend %d minutes on a calming routine."
+	default:
+		micro = "Review your notes for %d minutes and write one key idea."
+		stepText = "Study for %d minutes and explain one concept."
+	}
+	return fmt.Sprintf(micro, m), fmt.Sprintf(stepText, step), "template_" + strings.ToLower(category) + "_" + reason
+}
+
+func (a *App) reportMiss(c *gin.Context) {
+	u, _ := a.current(c)
+	var v struct {
+		MissedDate string `json:"missed_date"`
+		Reason     string `json:"reason"`
+		Workload   string `json:"workload"`
+		Energy     int    `json:"energy"`
+	}
+	if c.ShouldBindJSON(&v) != nil {
+		fail(c, 400, "Invalid report")
+		return
+	}
+	if v.MissedDate == "" {
+		v.MissedDate = localDate()
+	}
+	d, err := time.Parse("2006-01-02", v.MissedDate)
+	if err != nil || v.MissedDate > localDate() || d.Before(time.Now().AddDate(0, 0, -30)) {
+		fail(c, 400, "Missed date must be within the last 30 days")
+		return
+	}
+	if v.Reason != "exams" && v.Reason != "fatigue" && v.Reason != "other" {
+		fail(c, 400, "Choose a reason")
+		return
+	}
+	v.Energy = clamp(v.Energy, 1, 5)
+	if v.Workload == "" {
+		v.Workload = "medium"
+	}
+	ctx := c.Request.Context()
+	tx, err := a.DB.Begin(ctx)
+	if err != nil {
+		fail(c, 500, "Database unavailable")
+		return
+	}
+	defer tx.Rollback(ctx)
+	var title, category string
+	var minutes, streak, consecutive int
+	err = tx.QueryRow(ctx, `SELECT title,category,target_minutes,streak_count,consecutive_recoveries FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&title, &category, &minutes, &streak, &consecutive)
+	if err != nil {
+		fail(c, 404, "Habit not found")
+		return
+	}
+	if streak < 3 {
+		_, msg := recoveryEligibility(streak, 0, consecutive)
+		fail(c, 409, msg)
+		return
+	}
+	var count, active int
+	tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND reported_at>=now()-interval '30 days'`, c.Param("id")).Scan(&count)
+	tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND status IN ('offered','accepted','micro_completed','step_completed') AND expires_at>now()`, c.Param("id")).Scan(&active)
+	if active > 0 {
+		fail(c, 409, "You already have a recovery plan in progress")
+		return
+	}
+	if ok, msg := recoveryEligibility(streak, count, consecutive); !ok {
+		tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, c.Param("id"))
+		tx.Commit(ctx)
+		fail(c, 409, msg)
+		return
+	}
+	var exists int
+	tx.QueryRow(ctx, `SELECT count(*) FROM habit_logs WHERE habit_id=$1 AND log_date=$2::date AND kind='full'`, c.Param("id"), v.MissedDate).Scan(&exists)
+	if exists > 0 {
+		fail(c, 409, "You completed this habit on the selected day")
+		return
+	}
+	micro, stepText, tmpl := template(category, v.Reason, minutes)
+	microMinutes := clamp(int(math.Ceil(float64(minutes)/6)), 2, 10)
+	if minutes <= 3 {
+		microMinutes = 1
+	}
+	stepMinutes := clamp(int(math.Ceil(float64(minutes)/2)), microMinutes+1, minutes)
+	if minutes <= 3 {
+		stepMinutes = minutes
+	}
+	id := newID()
+	_, err = tx.Exec(ctx, `INSERT INTO recovery_sessions(id,user_id,habit_id,missed_date,reason,workload,energy,streak_before,micro_minutes,step_minutes,micro_text,step_text,expires_at,template_name) VALUES($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '48 hours',$13)`, id, u.ID, c.Param("id"), v.MissedDate, v.Reason, v.Workload, v.Energy, streak, microMinutes, stepMinutes, micro, stepText, tmpl)
+	if err != nil {
+		fail(c, 409, "This day has already been reported")
+		return
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind) VALUES($1,$2,$3,$4::date,'missed') ON CONFLICT DO NOTHING`, newID(), u.ID, c.Param("id"), v.MissedDate)
+	if err != nil {
+		fail(c, 500, "Could not save missed day")
+		return
+	}
+	if tx.Commit(ctx) != nil {
+		fail(c, 500, "Could not save")
+		return
+	}
+	a.event(ctx, u, "missed_day_reported", gin.H{"habit_id": c.Param("id"), "reason": v.Reason, "recovery_id": id})
+	a.event(ctx, u, "recovery_offered", gin.H{"habit_id": c.Param("id"), "recovery_id": id, "template": tmpl})
+	c.JSON(201, gin.H{"id": id, "habit_title": title, "status": "offered", "micro_text": micro, "micro_minutes": microMinutes, "step_minutes": stepMinutes, "streak_before": streak, "remaining_windows": 2 - count, "expires_in_hours": 48})
+}
+
+func (a *App) active(c *gin.Context) {
+	u, _ := a.current(c)
+	rows, err := a.DB.Query(c.Request.Context(), `SELECT r.id::text,h.id::text,h.title,h.target_minutes,r.reason,r.status,r.micro_minutes,r.step_minutes,r.micro_text,r.step_text,r.streak_before,r.reported_at,r.expires_at,r.missed_date::text,r.hero_log,(SELECT count(*) FROM recovery_sessions x WHERE x.habit_id=r.habit_id AND x.reported_at>=now()-interval '30 days') FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id WHERE r.user_id=$1 ORDER BY r.reported_at DESC LIMIT 20`, u.ID)
+	if err != nil {
+		fail(c, 500, "Database error")
+		return
+	}
+	defer rows.Close()
+	items := []gin.H{}
+	for rows.Next() {
+		var id, hid, title, reason, status, micro, step, missed string
+		var original, mm, sm, streak, count int
+		var reported, expires time.Time
+		var hero *string
+		if rows.Scan(&id, &hid, &title, &original, &reason, &status, &mm, &sm, &micro, &step, &streak, &reported, &expires, &missed, &hero, &count) != nil {
+			continue
+		}
+		if expires.Before(time.Now()) && (status == "offered" || status == "accepted") {
+			status = "expired"
+		}
+		logText := ""
+		if hero != nil {
+			logText = *hero
+		}
+		items = append(items, gin.H{"id": id, "habit_id": hid, "habit_title": title, "original_minutes": original, "reason": reason, "status": status, "micro_minutes": mm, "step_minutes": sm, "micro_text": micro, "step_text": step, "streak_before": streak, "reported_at": reported, "expires_at": expires, "missed_date": missed, "remaining_windows": clamp(3-count, 0, 3), "hero_log": logText})
+	}
+	c.JSON(200, gin.H{"recoveries": items})
+}
+
+func (a *App) recoveryAction(c *gin.Context, action string) {
+	u, _ := a.current(c)
+	ctx := c.Request.Context()
+	tx, err := a.DB.Begin(ctx)
+	if err != nil {
+		fail(c, 500, "DB unavailable")
+		return
+	}
+	defer tx.Rollback(ctx)
+	var status, habitID string
+	var expiry time.Time
+	var micro, step, original int
+	err = tx.QueryRow(ctx, `SELECT r.status,r.habit_id::text,r.expires_at,r.micro_minutes,r.step_minutes,h.target_minutes FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id WHERE r.id=$1 AND r.user_id=$2 FOR UPDATE OF r`, c.Param("id"), u.ID).Scan(&status, &habitID, &expiry, &micro, &step, &original)
+	if err != nil {
+		fail(c, 404, "Recovery not found")
+		return
+	}
+	if expiry.Before(time.Now()) && (status == "offered" || status == "accepted") {
+		tx.Exec(ctx, `UPDATE recovery_sessions SET status='expired' WHERE id=$1`, c.Param("id"))
+		tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, habitID)
+		tx.Commit(ctx)
+		fail(c, 409, "Recovery window expired; history and XP were kept")
+		return
+	}
+	type stage struct {
+		expected, next, kind, event string
+		minutes, xp                 int
+	}
+	stageByAction := map[string]stage{"accept": {"offered", "accepted", "", "recovery_started", 0, 0}, "micro": {"accepted", "micro_completed", "recovery", "recovery_completed", micro, 10}, "step": {"micro_completed", "step_completed", "step_up", "step_up_completed", step, 10}, "original": {"step_completed", "completed", "full", "full_difficulty_restored", original, 20}}
+	s := stageByAction[action]
+	if status != s.expected {
+		fail(c, 409, "Complete the previous step first")
+		return
+	}
+	if action != "accept" {
+		var v struct {
+			Confirmed bool
+			Notes     []string
+		}
+		if c.ShouldBindJSON(&v) != nil || !v.Confirmed {
+			fail(c, 400, "Confirm that you completed the task")
+			return
+		}
+		if len(v.Notes) > 3 {
+			fail(c, 400, "Up to three notes allowed")
+			return
+		}
+		data, _ := json.Marshal(v.Notes)
+		_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,notes) VALUES($1,$2,$3,$4::date,$5,$6,$7) ON CONFLICT(habit_id,log_date,kind) DO UPDATE SET notes=EXCLUDED.notes`, newID(), u.ID, habitID, localDate(), s.kind, s.minutes, data)
+		if err != nil {
+			fail(c, 500, "Could not save the check-in")
+			return
+		}
+		_, err = tx.Exec(ctx, `UPDATE users SET xp=xp+$2 WHERE id=$1`, u.ID, s.xp)
+		if err != nil {
+			fail(c, 500, "Could not update XP")
+			return
+		}
+	}
+	field := "accepted_at"
+	if action == "micro" {
+		field = "micro_completed_at"
+	}
+	if action == "step" {
+		field = "step_completed_at"
+	}
+	if action == "original" {
+		field = "original_completed_at"
+	}
+	hero := ""
+	if action == "micro" {
+		hero = "I returned, one small step at a time. Tomorrow I can try a little more."
+	}
+	if action == "step" {
+		hero = "A little more focus today. My original goal is in reach."
+	}
+	if action == "original" {
+		hero = "I came back at my own pace. The small steps counted."
+	}
+	_, err = tx.Exec(ctx, `UPDATE recovery_sessions SET status=$2,`+field+`=now(),hero_log=CASE WHEN $3='' THEN hero_log ELSE $3 END WHERE id=$1`, c.Param("id"), s.next, hero)
+	if err != nil {
+		fail(c, 500, "Could not save step")
+		return
+	}
+	if action == "micro" {
+		_, err = tx.Exec(ctx, `UPDATE habits SET consecutive_recoveries=consecutive_recoveries+1 WHERE id=$1`, habitID)
+	}
+	if action == "original" {
+		_, err = tx.Exec(ctx, `UPDATE habits SET streak_count=streak_count+1,best_streak=GREATEST(best_streak,streak_count+1),consecutive_recoveries=0 WHERE id=$1`, habitID)
+	}
+	if err != nil {
+		fail(c, 500, "Could not save progress")
+		return
+	}
+	if tx.Commit(ctx) != nil {
+		fail(c, 500, "Commit failed")
+		return
+	}
+	a.event(ctx, u, s.event, gin.H{"recovery_id": c.Param("id"), "habit_id": habitID, "xp_awarded": s.xp, "minutes": s.minutes})
+	c.JSON(200, gin.H{"ok": true, "status": s.next, "xp_awarded": s.xp, "hero_log": hero})
+}
