@@ -41,8 +41,10 @@ func main() {
 		}
 	}
 	a := &App{DB: db, Client: &http.Client{Timeout: 5 * time.Second}, AmplitudeKey: os.Getenv("AMPLITUDE_API_KEY")}
-	if err = a.seedDemoAccounts(context.Background()); err != nil {
-		log.Fatalf("Demo seed failed: %v", err)
+	if env("DEMO_MODE", "false") == "true" {
+		if err = a.seedDemoAccounts(context.Background()); err != nil {
+			log.Fatalf("Demo seed failed: %v", err)
+		}
 	}
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -104,7 +106,9 @@ func main() {
 	}
 	secure.GET("/insights", a.insights)
 	secure.GET("/admin/metrics", a.adminMetrics)
-	secure.POST("/demo/seed", a.seedDemo)
+	if env("DEMO_MODE", "false") == "true" {
+		secure.POST("/demo/seed", a.seedDemo)
+	}
 	port := env("PORT", "8080")
 	log.Printf("Habiton API on :%s", port)
 	log.Fatal(r.Run(":" + port))

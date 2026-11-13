@@ -296,16 +296,6 @@ export default function Today() {
             Create your first habit
           </Link>
 
-          {user && !user.is_demo && (
-            <button
-              className="text-button"
-              onClick={() =>
-                void perform(() => API.seed())
-              }
-            >
-              Load demo progress (demo-only account)
-            </button>
-          )}
         </div>
       )}
 
