@@ -1,18 +1,13 @@
-# Habiton ✦ — Penguin Recovery MVP v2
-
-**A gentle, mobile-first habit tracker that helps people recover after a missed day instead of giving up.** Built from our Product Analytics Assignments 3–9 and Figma Version C screenshots, with a penguin mascot provided by the team.
+# Habiton ✦ MVP
+A gentle, mobile-first habit tracker that helps people recover after a missed day instead of giving up.
 
 ## Stack
-
 - Frontend: Next.js 15 App Router, React 19, TypeScript, CSS, PWA
 - Backend: Go 1.25, Gin REST API, pgx
 - Database: PostgreSQL 16 in Docker Compose (persistent named volume)
 - Analytics: PostgreSQL event log, administrator recovery KPI, optional Amplitude HTTP API
 
 ## First-time launch on Windows
-
-Requirements: Docker Desktop running (WSL2 enabled), enough free space on D:.
-
 ```powershell
 cd D:\Habiton\Habiton-project
 Copy-Item .env.example .env
@@ -64,36 +59,3 @@ Demo accounts are excluded from real-user metrics and Amplitude forwarding. For 
 ## Local development without Docker
 
 Run PostgreSQL separately and set `DATABASE_URL`. Within `backend/`: `go mod tidy`, `go run .` (Go 1.25). Within `frontend/`: `npm install`, set `BACKEND_URL=http://localhost:8080` in `.env.local`, `npm run dev`. Do not commit secret environment files.
-
-## Tests and troubleshooting
-
-```powershell
-# From root
-docker compose ps
-docker compose logs backend --tail=80
-docker compose logs frontend --tail=80
-# If a source file changed:
-docker compose up --build -d
-# Backend tests:
-cd backend
-go test ./...
-# Frontend build:
-cd ..\frontend
-npm run build
-```
-
-See [acceptance checklist](docs/ACCEPTANCE-CHECKLIST.md), [API routes](docs/API.md), [architecture](docs/ARCHITECTURE.md), [team workflow](docs/TEAM-WORKFLOW.md) and [upgrade instructions](docs/UPGRADE.md).
-
-## Analytics / public release
-
-The Go server writes activity events to PostgreSQL. Set `ADMIN_EMAIL` to the email of a real registered admin account to open `/admin`. The Amplitude HTTP API sender is enabled only if `AMPLITUDE_API_KEY` is set, and excludes demo events. Create an Amplitude dashboard in your Amplitude workspace to view events; **that dashboard is not automatically created by source code**.
-
-For public hosting you must provision a real managed PostgreSQL database, HTTPS, secure cookies (`COOKIE_SECURE=true`), a strong DB password, public `APP_ORIGIN`, and `DEMO_MODE=false`. Do not publish the local sample credentials. Backend and Next.js should share the same public origin under `/api` (or configure a trusted reverse proxy). Production deployment and external analytics credentials require your own accounts.
-
-## Scope / references
-
-Primary product decisions come from Habiton Assignment 8 and 9. Figma Version C serves as the design reference, although this is not a literal code export nor pixel-perfect reconstruction of every Figma frame. We preserved the lavender primary color, added warm orange recovery CTA, and introduced the user-supplied penguin character as the only RPG companion.
-
-The uploaded Habitica GPLv3 archive was used solely to review **ideas** such as quest cards, class choices, XP and character progression. **No Habitica code or assets were copied** into this package.
-
-**Status:** Code generated and inspected, TypeScript source syntax parsed, Go source formatted and pure recovery-rule tests passed. This environment cannot download npm/Go packages or launch Docker, so the complete application still needs a `docker compose up --build -d` and end-to-end user test on Windows before calling it production-ready.
