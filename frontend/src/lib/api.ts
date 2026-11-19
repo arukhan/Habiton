@@ -1,4 +1,4 @@
-import type {Habit,Recovery,User,Insights,Metrics} from "@/types";
+import type {Habit,Recovery,User,Insights,Metrics,WeekDay} from "@/types";
 export class ApiError extends Error {constructor(public status:number,message:string){super(message);this.name="ApiError"}}
 export async function request<T>(path:string,options:RequestInit={}):Promise<T>{
  const result=await fetch(`/api${path}`,{credentials:"include",cache:"no-store",...options,headers:{...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
@@ -14,6 +14,10 @@ export const API={
  logout:()=>post<{ok:boolean}>("/auth/logout"),
  updateProfile:(body:{name?:string;hero_class?:string})=>request<{user:User}>("/me",{method:"PATCH",body:JSON.stringify(body),headers:{"Content-Type":"application/json"}}),
  habits:()=>request<{habits:Habit[]}>("/habits"),
+ recoveryLimits:()=>request<{limits:{habit_id:string;used:number;remaining:number;limit:number}[]}>("/habits/recovery-limits"),
+ updateHabit:(id:string,body:{title:string;category:string;target_minutes:number})=>request<{ok:boolean}>(`/habits/${id}`,{method:"PATCH",body:JSON.stringify(body),headers:{"Content-Type":"application/json"}}),
+ week:()=>request<{days:WeekDay[];today:string}>("/habits/week"),
+ missedDates:(id:string)=>request<{dates:string[]}>(`/habits/${id}/missed-dates`),
  createHabit:(body:{title:string;category:string;target_minutes:number})=>post<{id:string}>("/habits",body),
  completeHabit:(id:string)=>post<{ok:boolean}>(`/habits/${id}/complete`),
  undoCompleteHabit: (id: string) =>

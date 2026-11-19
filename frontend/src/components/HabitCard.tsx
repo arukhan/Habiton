@@ -16,6 +16,7 @@ interface HabitCardProps {
   onToggle: () => void;
   onArchive?: () => void;
   busy?: boolean;
+  readOnly?: boolean;
 }
 
 export function HabitCard({
@@ -23,6 +24,7 @@ export function HabitCard({
   onToggle,
   onArchive,
   busy = false,
+  readOnly = false,
 }: HabitCardProps) {
   const category = habit.category.toLowerCase();
 
@@ -41,15 +43,15 @@ export function HabitCard({
       </span>
 
       <div className="habit-info">
-        <strong>{habit.title}</strong>
+        <strong className={habit.completed_today ? "habit-title-completed" : undefined}>{habit.title}</strong>
 
         <small>
-          {habit.target_minutes} min daily · 🔥{" "}
-          {habit.streak}-day streak
+          {habit.target_minutes} min daily
+          {!readOnly && <> · 🔥 {habit.streak}-day streak</>}
         </small>
       </div>
 
-      {onArchive && (
+      {onArchive && !readOnly && (
         <button
           type="button"
           className="icon-action"
@@ -68,14 +70,14 @@ export function HabitCard({
           habit.completed_today ? "done" : ""
         }`}
         onClick={onToggle}
-        disabled={busy}
+        disabled={busy || readOnly}
         aria-pressed={habit.completed_today}
         aria-label={
           habit.completed_today
             ? `Undo completion of ${habit.title}`
             : `Complete ${habit.title}`
         }
-        title={
+        title={readOnly ? "Past and future days are read-only" :
           habit.completed_today
             ? "Undo completion"
             : "Mark as completed"

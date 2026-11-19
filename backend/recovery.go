@@ -60,11 +60,17 @@ func (a *App) reportMiss(c *gin.Context) {
 		return
 	}
 	if v.MissedDate == "" {
-		v.MissedDate = localDate()
+		fail(c, 400, "Select a missed date")
+		return
 	}
-	d, err := time.Parse("2006-01-02", v.MissedDate)
-	if err != nil || v.MissedDate > localDate() || d.Before(time.Now().AddDate(0, 0, -30)) {
-		fail(c, 400, "Missed date must be within the last 30 days")
+	_, err := time.Parse("2006-01-02", v.MissedDate)
+	loc, locErr := time.LoadLocation("Asia/Almaty")
+	if locErr != nil {
+		loc = time.UTC
+	}
+	oldestDate := time.Now().In(loc).AddDate(0, 0, -30).Format("2006-01-02")
+	if err != nil || v.MissedDate >= localDate() || v.MissedDate < oldestDate {
+		fail(c, 400, "Choose a past missed date within the last 30 days")
 		return
 	}
 	if v.Reason != "exams" && v.Reason != "fatigue" && v.Reason != "other" {
@@ -105,6 +111,26 @@ func (a *App) reportMiss(c *gin.Context) {
 		tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, c.Param("id"))
 		tx.Commit(ctx)
 		fail(c, 409, msg)
+		return
+	}
+	var validHabitDate bool
+	err = tx.QueryRow(ctx, `
+        SELECT $2::date >= LEAST(
+            (created_at AT TIME ZONE 'Asia/Almaty')::date,
+            COALESCE((SELECT MIN(log_date) FROM habit_logs WHERE habit_id=$1),
+                     (created_at AT TIME ZONE 'Asia/Almaty')::date))
+        FROM habits WHERE id=$1 AND user_id=$3 AND NOT archived
+    `, c.Param("id"), v.MissedDate, u.ID).Scan(&validHabitDate)
+	if err != nil || !validHabitDate {
+		fail(c, 409, "The habit did not exist on that date")
+		return
+	}
+	var alreadyReported bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS (
+        SELECT 1 FROM recovery_sessions WHERE habit_id=$1 AND missed_date=$2::date
+    )`, c.Param("id"), v.MissedDate).Scan(&alreadyReported)
+	if err != nil || alreadyReported {
+		fail(c, 409, "This day was already reported")
 		return
 	}
 	var exists int

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,14 +9,16 @@ import { useRouter } from "next/navigation";
 import { Shell } from "@/components/Shell";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
-import { localDay } from "@/lib/dates";
+
 
 export default function Report() {
   const router = useRouter();
   const { habits, refresh } = useHabiton();
 
   const [habitId, setHabitId] = useState("");
-  const [date, setDate] = useState(localDay(-1));
+  const [date, setDate] = useState("");
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [datesLoading, setDatesLoading] = useState(false);
   const [reason, setReason] = useState("exams");
   const [workload, setWorkload] = useState("high");
   const [energy, setEnergy] = useState(2);
@@ -31,10 +33,29 @@ export default function Report() {
     [habitId, habits]
   );
 
+  useEffect(() => {
+    if (!selected?.id) return;
+    let cancelled = false;
+    setDatesLoading(true);
+    setDate("");
+    setAvailableDates([]);
+    API.missedDates(selected.id).then((result) => {
+      if (cancelled) return;
+      setAvailableDates(result.dates);
+      setDate(result.dates[0] || "");
+    }).catch((e: unknown) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : "Could not load missed days");
+    }).finally(() => { if (!cancelled) setDatesLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected?.id]);
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!selected) return;
+    if (!selected || !date || !availableDates.includes(date)) {
+      setError("Please select an available missed date");
+      return;
+    }
 
     setBusy(true);
     setError("");
@@ -112,12 +133,23 @@ export default function Report() {
         <label>
           Missed date
 
-          <input
-            type="date"
+          <select
             value={date}
-            max={localDay()}
             onChange={(e) => setDate(e.target.value)}
-          />
+            disabled={datesLoading || availableDates.length === 0}
+            required
+          >
+            {availableDates.length === 0 && <option value="">
+              {datesLoading ? "Loading missed dates..." : "No available missed dates"}
+            </option>}
+            {availableDates.map((day) => (
+              <option key={day} value={day}>{day}</option>
+            ))}
+          </select>
+          <span className="missed-date-help">
+            Only past dates without a recorded completion are selectable.
+            Please confirm that you really missed the habit.
+          </span>
         </label>
 
         <p className="form-section-title">
@@ -186,7 +218,7 @@ export default function Report() {
         <button
           type="submit"
           className="btn-orange"
-          disabled={busy || !selected}
+          disabled={busy || datesLoading || !selected || !date}
         >
           {busy
             ? "Preparing your quest..."

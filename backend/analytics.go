@@ -13,7 +13,7 @@ func (a *App) insights(c *gin.Context) {
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='full'`, u.ID).Scan(&full)
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='recovery'`, u.ID).Scan(&recovery)
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='step_up'`, u.ID).Scan(&step)
-	rows, err := a.DB.Query(c.Request.Context(), `SELECT l.log_date::text,l.kind,l.minutes,h.title FROM habit_logs l JOIN habits h ON h.id=l.habit_id WHERE l.user_id=$1 ORDER BY l.log_date DESC,l.created_at DESC LIMIT 35`, u.ID)
+	rows, err := a.DB.Query(c.Request.Context(), `SELECT l.log_date::text,l.kind,CASE WHEN l.kind='full' AND l.minutes=0 THEN h.target_minutes ELSE l.minutes END,h.title FROM habit_logs l JOIN habits h ON h.id=l.habit_id WHERE l.user_id=$1 ORDER BY l.log_date DESC,l.created_at DESC LIMIT 35`, u.ID)
 	items := []gin.H{}
 	if err == nil {
 		defer rows.Close()
@@ -25,7 +25,77 @@ func (a *App) insights(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(200, gin.H{"total_habits": total, "full_sessions": full, "recoveries": recovery, "step_ups": step, "best_streak": best, "history": items})
+	// One bar = one calendar day in Asia/Almaty, not one habit log.
+	// A full habit_log means that ONE habit was completed; 100% requires all
+	// habits scheduled for that day to have a full log.
+	// For seeded sample history only, the earliest stored log can precede
+	// habits.created_at. LEAST() makes these historical demonstrations visible.
+	// Archived habits are included in history because the current schema does
+	// not store an archived_at timestamp. See README_DAILY_COMPLETION_RU.md.
+	const dailySQL = `
+		WITH days AS (
+			SELECT generate_series(
+				((now() AT TIME ZONE 'Asia/Almaty')::date - 13)::timestamp,
+				((now() AT TIME ZONE 'Asia/Almaty')::date)::timestamp,
+				interval '1 day'
+			)::date AS day
+		)
+		SELECT d.day::text,
+			COUNT(DISTINCT h.id)::int AS total_habits,
+			COUNT(DISTINCT l.habit_id)::int AS completed_habits
+		FROM days d
+		LEFT JOIN habits h ON h.user_id=$1
+			AND d.day >= LEAST(
+				(h.created_at AT TIME ZONE 'Asia/Almaty')::date,
+				COALESCE((SELECT MIN(older.log_date)
+					FROM habit_logs older WHERE older.habit_id=h.id),
+					(h.created_at AT TIME ZONE 'Asia/Almaty')::date)
+			)
+		LEFT JOIN habit_logs l ON l.habit_id=h.id
+			AND l.user_id=$1 AND l.log_date=d.day AND l.kind='full'
+		GROUP BY d.day
+		ORDER BY d.day
+	`
+	dailyRows, err := a.DB.Query(c.Request.Context(), dailySQL, u.ID)
+	if err != nil {
+		fail(c, 500, "Could not load daily progress")
+		return
+	}
+	daily := []gin.H{}
+	perfectDays := 0
+	for dailyRows.Next() {
+		var date string
+		var totalDay, completedDay int
+		if err := dailyRows.Scan(&date, &totalDay, &completedDay); err != nil {
+			dailyRows.Close()
+			fail(c, 500, "Could not read daily progress")
+			return
+		}
+		percentage := 0
+		if totalDay > 0 {
+			percentage = (completedDay*100 + totalDay/2) / totalDay
+			if completedDay == totalDay {
+				perfectDays++
+			}
+		}
+		daily = append(daily, gin.H{
+			"date": date, "total_habits": totalDay,
+			"completed_habits": completedDay, "percentage": percentage,
+		})
+	}
+	if err := dailyRows.Err(); err != nil {
+		dailyRows.Close()
+		fail(c, 500, "Could not load daily progress")
+		return
+	}
+	dailyRows.Close()
+
+	c.JSON(200, gin.H{
+		"total_habits": total, "full_sessions": full,
+		"recoveries": recovery, "step_ups": step,
+		"best_streak": best, "history": items,
+		"daily_completion": daily, "perfect_days": perfectDays,
+	})
 }
 
 func (a *App) adminMetrics(c *gin.Context) {

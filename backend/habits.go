@@ -77,8 +77,8 @@ func (a *App) completeHabit(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback(ctx)
-	var streak int
-	err = tx.QueryRow(ctx, `SELECT streak_count FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&streak)
+	var streak, targetMinutes int
+	err = tx.QueryRow(ctx, `SELECT streak_count, target_minutes FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&streak, &targetMinutes)
 	if err != nil {
 		fail(c, 404, "Habit not found")
 		return
@@ -95,7 +95,7 @@ func (a *App) completeHabit(c *gin.Context) {
 		fail(c, 409, "Finish your active recovery plan first")
 		return
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind) VALUES($1,$2,$3,$4::date,'full')`, newID(), u.ID, c.Param("id"), localDate())
+	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes) VALUES($1,$2,$3,$4::date,'full',$5)`, newID(), u.ID, c.Param("id"), localDate(), targetMinutes)
 	if err != nil {
 		fail(c, 500, "Could not record completion")
 		return
