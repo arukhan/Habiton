@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Pencil, Check, X, LogOut } from "lucide-react";
+import { Pencil, Check, X, LogOut, Palette, ChevronDown, Moon, Sun } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { useThemeSettings, type ThemeName } from "@/components/ThemeProvider";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
 import type { Habit } from "@/types";
@@ -22,10 +23,19 @@ const descriptions: Record<HeroClass,string> = {
 };
 const minuteOptions=[5,10,15,20,30,45,60,90,120];
 const categories=["Study","Reading","Fitness","Health","Mindfulness","Other"];
+const palettes: { key: ThemeName; label: string; color: string }[] = [
+  {key:"lavender",label:"Lavender",color:"#7535b5"},
+  {key:"sage",label:"Sage",color:"#357b62"},
+  {key:"blue",label:"Blue",color:"#426da8"},
+  {key:"rose",label:"Rose",color:"#a45077"},
+  {key:"peach",label:"Peach",color:"#a85b39"},
+];
 const message=(e:unknown)=>e instanceof Error?e.message:"Something went wrong";
 
 export default function Profile() {
   const {user,habits,insights,updateProfile,refresh,logout}=useHabiton();
+  const {theme,mode,setTheme,setMode}=useThemeSettings();
+  const [themeOpen,setThemeOpen]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [limits,setLimits]=useState<Limit[]>([]);
@@ -148,6 +158,32 @@ export default function Profile() {
       <div className="profile-xp-row"><span>✨ Complete a micro-quest</span><b>+10 XP</b></div>
       <div className="profile-xp-row"><span>🌱 Complete a step-up</span><b>+10 XP</b></div>
       <p className="muted">No leaderboards. Your only competition is yesterday.</p>
+    </section>
+
+    <section className="card theme-settings-card" aria-label="Appearance settings">
+      <p className="eyebrow">YOUR SPACE</p>
+      <h2>Appearance</h2>
+      <button type="button" className="theme-settings-trigger" aria-expanded={themeOpen} onClick={()=>setThemeOpen(v=>!v)}>
+        <Palette size={19} aria-hidden="true"/>
+        <span>Customize theme</span>
+        <ChevronDown size={17} aria-hidden="true" style={{transform:themeOpen?"rotate(180deg)":undefined}}/>
+      </button>
+      {themeOpen&&<div className="theme-settings-panel">
+        <h3>Choose your color</h3>
+        <div className="theme-swatch-grid" role="group" aria-label="Color palettes">
+          {palettes.map(p=><button key={p.key} type="button" className="theme-swatch" aria-pressed={theme===p.key} onClick={()=>setTheme(p.key)}>
+            <span className="theme-swatch-dot" style={{background:p.color}}>{theme===p.key?<Check size={17}/>:null}</span>
+            <span>{p.label}</span>
+          </button>)}
+        </div>
+        <div className="theme-mode-row">
+          <span className="theme-mode-label">{mode==="dark"?<Moon size={17}/>:<Sun size={17}/>} Dark mode</span>
+          <button type="button" className="theme-mode-toggle" role="switch" aria-checked={mode==="dark"} onClick={()=>setMode(mode==="dark"?"light":"dark")}>
+            {mode==="dark"?"On":"Off"}
+          </button>
+        </div>
+        <p className="theme-settings-note">Saved automatically on this device. The same colors apply to Today, Recovery, Insights and Profile.</p>
+      </div>}
     </section>
 
     {notice&&<p className="profile-notice" role="status">{notice}</p>}
