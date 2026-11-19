@@ -41,7 +41,7 @@ export function HabitCard({
       </span>
 
       <div className="habit-info">
-        <strong>{habit.title}</strong>
+        <strong className={habit.completed_today ? "habit-title-completed" : undefined}>{habit.title}</strong>
 
         <small>
           {habit.target_minutes} min daily · 🔥{" "}

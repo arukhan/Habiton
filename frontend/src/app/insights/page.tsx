@@ -12,14 +12,9 @@ export default function Insights() {
 
   const history = insights?.history || [];
 
-  // Maximum value for scaling the chart
-  const maxMinutes = Math.max(
-    1,
-    ...history.map((item) => item.minutes)
-  );
-
-  // Latest 12 history records for the chart
-  const chartHistory = history.slice(0, 12).reverse();
+  // One bar per calendar day. Values come from the current user's backend
+  // and use the count of completed habits, never minutes.
+  const dailyCompletion = insights?.daily_completion ?? [];
 
   // Latest 20 records for the timeline
   const timelineHistory = history.slice(0, 20);
@@ -58,8 +53,8 @@ export default function Insights() {
 
         <div className="stat-row stats">
           <div>
-            <b>{insights?.full_sessions || 0}</b>
-            <span>Full sessions</span>
+            <b>{insights?.perfect_days ?? 0}</b>
+            <span>Perfect days (last 14)</span>
           </div>
 
           <div>
@@ -79,42 +74,42 @@ export default function Insights() {
         </p>
       </div>
 
-      {/* Session history chart */}
+      {/* Daily completion chart — each bar represents one calendar day. */}
       <div className="card">
-        <h2>Session history</h2>
-
+        <h2>Daily completion</h2>
         <p className="muted">
-          Minutes per check-in
-          (not a calendar of perfect days)
+          The percentage of your habits completed each day. 100% means all
+          habits for that day were completed.
         </p>
 
-        <div className="bar-chart">
-          {chartHistory.map((item, index) => {
-            const barHeight = Math.max(
-              7,
-              (item.minutes / maxMinutes) * 110
-            );
-
-            return (
-              <div
-                className="bar-chart-column"
-                key={index}
-                title={`${item.habit_title} · ${item.kind} · ${item.minutes} min`}
-              >
-                <div
-                  className={`bar bar-${item.kind}`}
-                  style={{ height: `${barHeight}px` }}
-                />
-
-                <small>{niceDate(item.date)}</small>
+        <div className="daily-chart" role="list" aria-label="Habit completion by day">
+          {dailyCompletion.map((day) => (
+            <div
+              role="listitem"
+              className="daily-chart-column"
+              key={day.date}
+              title={day.total_habits > 0
+                ? `${day.date}: ${day.completed_habits} of ${day.total_habits} habits (${day.percentage}%)`
+                : `${day.date}: no habits yet`}
+            >
+              <span className="daily-chart-percentage">
+                {day.total_habits ? `${day.percentage}%` : "—"}
+              </span>
+              <div className="daily-chart-track">
+                {day.total_habits > 0 && day.percentage > 0 && (
+                  <div
+                    className={`daily-chart-fill${day.percentage === 100 ? " daily-chart-full" : ""}`}
+                    style={{ height: `${day.percentage}%` }}
+                  />
+                )}
               </div>
-            );
-          })}
+              <small>{niceDate(day.date)}</small>
+            </div>
+          ))}
         </div>
-
-        <div className="chart-legend">
-          🟣 Full · 🟪 Recovery · 🟠 Step-up · ⚪ Missed
-        </div>
+        <p className="muted daily-chart-note">
+          Full = 100% of the day's habits. Partial = 1–99%. No bar = 0%.
+        </p>
       </div>
 
       {/* Activity timeline */}
@@ -133,11 +128,7 @@ export default function Insights() {
                 {item.kind.replaceAll("_", " ")}
               </span>
 
-              <b>
-                {item.minutes
-                  ? `${item.minutes} min`
-                  : "—"}
-              </b>
+              <b>{item.kind === "full" ? "Completed" : item.kind.replaceAll("_", " ")}</b>
             </div>
           ))}
         </div>

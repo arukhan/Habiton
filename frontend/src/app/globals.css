@@ -305,3 +305,22 @@ p{line-height:1.65}
   height: 100%;
   object-fit: contain;
 }
+/* Stage A: completed habit clarity */
+.habit-info strong.habit-title-completed {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+
+/* Daily completion: each bar represents one calendar day, not check-in minutes. */
+.daily-chart{display:flex;gap:5px;align-items:flex-end;justify-content:space-between;margin-top:24px;padding-bottom:8px;border-bottom:1px solid #e9d6f3;overflow-x:auto}
+.daily-chart-column{flex:1;min-width:16px;max-width:36px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.daily-chart-percentage{color:#644080;font-size:9px;font-weight:700;white-space:nowrap}
+.daily-chart-track{height:115px;width:100%;max-width:23px;background:#f0e9f6;border-radius:6px 6px 2px 2px;overflow:hidden;display:flex;align-items:flex-end}
+.daily-chart-fill{width:100%;background:#b58ada;border-radius:6px 6px 2px 2px;min-height:2px}
+.daily-chart-fill.daily-chart-full{background:#7840bb}
+.daily-chart-column small{font-size:8px;color:#81718b;white-space:nowrap}
+.daily-chart-note{font-size:11px;margin-top:10px}
+@media(max-width:390px){.daily-chart{gap:3px}.daily-chart-column small{font-size:7px}}
