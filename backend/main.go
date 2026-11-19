@@ -94,6 +94,8 @@ func main() {
 	secure.GET("/me", a.me)
 	secure.PATCH("/me", a.updateMe)
 	secure.GET("/habits", a.habits)
+	secure.GET("/habits/week", a.habitWeek)
+	secure.GET("/habits/:id/missed-dates", a.missedDates)
 	secure.POST("/habits", a.createHabit)
 	secure.DELETE("/habits/:id", a.deleteHabit)
 	secure.POST("/habits/:id/complete", a.completeHabit)

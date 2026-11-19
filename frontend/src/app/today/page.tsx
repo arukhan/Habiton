@@ -2,7 +2,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -17,6 +17,8 @@ import { Shell } from "@/components/Shell";
 import { HabitCard } from "@/components/HabitCard";
 import { API } from "@/lib/api";
 import { useHabiton } from "@/context/AppContext";
+import { localDay } from "@/lib/dates";
+import type { WeekDay, Habit } from "@/types";
 
 export default function Today() {
   const {
@@ -28,6 +30,35 @@ export default function Today() {
 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [week, setWeek] = useState<WeekDay[]>([]);
+  const [selectedDay, setSelectedDay] = useState(localDay());
+  const [weekLoading, setWeekLoading] = useState(true);
+  const today = localDay();
+  const isToday = selectedDay === today;
+
+  useEffect(() => {
+    let mounted = true;
+    API.week().then((data) => {
+      if (mounted) setWeek(data.days);
+    }).catch((e: unknown) => {
+      if (mounted) setError(e instanceof Error ? e.message : "Could not load calendar");
+    }).finally(() => {
+      if (mounted) setWeekLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [habits]);
+
+  const activeDay = week.find((d) => d.date === selectedDay);
+  const selectedHabits = useMemo(() => {
+    if (isToday || weekLoading) return habits;
+    return (activeDay?.habits ?? []).map((item): Habit => ({
+      ...item,
+      streak: 0,
+      best_streak: 0,
+      consecutive_recoveries: 0,
+      completed_today: item.completed,
+    }));
+  }, [isToday, weekLoading, habits, activeDay]);
 
   // Find active recovery
   const recovery = recoveries.find((r) =>
@@ -81,24 +112,14 @@ export default function Today() {
     );
   }
 
-  // Week calendar
-  const weekDays = Array.from(
-    { length: 7 },
-    (_, index) => {
-      const date = new Date();
-
-      date.setDate(date.getDate() + index - 3);
-
-      return {
-        day: date.toLocaleDateString(
-          "en-US",
-          { weekday: "short" }
-        ).slice(0, 1),
-        date: date.getDate(),
-        isToday: index === 3,
-      };
-    }
-  );
+  // Current week, Monday to Sunday (Asia/Almaty date from API).
+  // Calendar labels come from ISO dates to avoid client timezone shifts.
+  const weekDays = week.length ? week : Array.from({ length: 7 }, (_, i) => {
+    const utc = new Date(`${today}T12:00:00Z`);
+    const weekday = (utc.getUTCDay() + 6) % 7;
+    utc.setUTCDate(utc.getUTCDate() - weekday + i);
+    return { date: utc.toISOString().slice(0, 10), habits: [] as WeekDay["habits"] };
+  });
 
   // XP progress
   const xpInLevel = user?.xp_in_level ?? 0;
@@ -165,18 +186,24 @@ export default function Today() {
       </div>
 
       {/* Week calendar */}
-      <div className="weekday-row">
-        {weekDays.map((day, index) => (
-          <div
-            key={index}
-            className={`weekday ${
-              day.isToday ? "active" : ""
-            }`}
-          >
-            <span>{day.day}</span>
-            <strong>{day.date}</strong>
-          </div>
-        ))}
+      <div className="weekday-row" aria-label="Habits for this week">
+        {weekDays.map((day) => {
+          const utc = new Date(`${day.date}T12:00:00Z`);
+          const label = utc.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+          return (
+            <button
+              key={day.date}
+              type="button"
+              className={`weekday ${selectedDay === day.date ? "active" : ""}`}
+              onClick={() => setSelectedDay(day.date)}
+              aria-pressed={selectedDay === day.date}
+              aria-label={`View ${day.date}`}
+            >
+              <span>{label.slice(0, 1)}</span>
+              <strong>{utc.getUTCDate()}</strong>
+            </button>
+          );
+        })}
       </div>
 
       {/* Recovery section */}
@@ -244,29 +271,26 @@ export default function Today() {
 
       {/* Habit list */}
       <div className="section-heading">
-        <h2>Your habits</h2>
+        <h2>{isToday ? "Your habits" : `Habits · ${selectedDay}`}</h2>
 
-        <Link
-          className="text-button"
-          href="/habits/new"
-        >
-          <Plus size={16} />
-          New habit
-        </Link>
+        {isToday && <Link className="text-button" href="/habits/new">
+          <Plus size={16} /> New habit
+        </Link>}
       </div>
 
-      {habits.map((habit) => (
+      {selectedHabits.map((habit) => (
         <HabitCard
           key={habit.id}
           habit={habit}
           busy={busy}
+          readOnly={!isToday}
           onToggle={() =>
             toggleHabit(
               habit.id,
               habit.completed_today
             )
           }
-          onArchive={() => {
+          onArchive={isToday ? () => {
             if (
               window.confirm(
                 `Archive ${habit.title}? Your history remains saved.`
@@ -276,25 +300,21 @@ export default function Today() {
                 API.archiveHabit(habit.id)
               );
             }
-          }}
+          } : undefined}
         />
       ))}
 
       {/* Empty state */}
-      {habits.length === 0 && (
+      {selectedHabits.length === 0 && !weekLoading && (
         <div className="empty">
           <BookOpen />
 
-          <h3>
-            Your story starts with one habit.
-          </h3>
+          <h3>{isToday ? "Your story starts with one habit." :
+            "No habits were scheduled for this day."}</h3>
 
-          <Link
-            href="/habits/new"
-            className="btn-primary"
-          >
+          {isToday && <Link href="/habits/new" className="btn-primary">
             Create your first habit
-          </Link>
+          </Link>}
 
         </div>
       )}

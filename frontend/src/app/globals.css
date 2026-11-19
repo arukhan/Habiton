@@ -324,3 +324,12 @@ p{line-height:1.65}
 .daily-chart-column small{font-size:8px;color:#81718b;white-space:nowrap}
 .daily-chart-note{font-size:11px;margin-top:10px}
 @media(max-width:390px){.daily-chart{gap:3px}.daily-chart-column small{font-size:7px}}
+
+/* Stage B: clickable week and read-only history */
+.weekday-row .weekday{border:0;cursor:pointer;flex-shrink:0;transition:background .15s,transform .15s}
+.weekday-row .weekday:hover{transform:translateY(-2px)}
+.weekday-row .weekday:focus-visible{outline:3px solid #d4aaff;outline-offset:3px}
+.weekday-row .weekday.active{background:#3e186f;color:#fff}
+.calendar-caption{font-size:10px;color:#846d96;margin:-5px 1px 13px}
+.missed-date-help{display:block;color:#83718d;font-size:10px;font-weight:400;line-height:1.5}
+.habit-card .check-button:disabled{opacity:.48;cursor:not-allowed}
