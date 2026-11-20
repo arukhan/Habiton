@@ -436,19 +436,70 @@ const russian: Readonly<Record<string, string>> = {
   "Hero’s Log": "Дневник героя",
   "Open Hero’s Log": "Открыть дневник героя",
   "← Insights": "← Статистика",
-  "Your penguin remembers the steps you completed.": "Ваш пингвин помнит каждый выполненный шаг.",
+  "Your penguin remembers the steps you completed.":
+    "Ваш пингвин помнит каждый выполненный шаг.",
   "Your Hero’s Log is empty.": "Дневник героя пока пуст.",
-  "Complete a habit or a recovery step to add your first entry.": "Выполните привычку или шаг восстановления, чтобы появилась первая запись.",
+  "Complete a habit or a recovery step to add your first entry.":
+    "Выполните привычку или шаг восстановления, чтобы появилась первая запись.",
   "Habit completed": "Привычка выполнена",
-  "I showed up for another round of training. That effort counts.": "Я снова вышел на тренировку. Каждый такой выход важен.",
-  "I’ve added another completed quest to my spellbook.": "В моём гримуаре появилась запись о новом выполненном задании.",
-  "I made room for one thing that matters today.": "Сегодня нашлось время на то, что для меня важно.",
-  "I’m back on the trail. One small step was enough to start.": "Я снова в пути. Для начала хватило одного маленького шага.",
-  "A tiny spell was enough to get the adventure moving again.": "Одного маленького заклинания хватило, чтобы приключение продолжилось.",
-  "I gave myself a gentler way to return, and it worked.": "Я выбрал мягкий способ вернуться, и у меня получилось.",
-  "I took on a little more today. My next step feels within reach.": "Сегодня я взялся за задачу чуть сложнее. Следующий шаг уже по силам.",
-  "I practiced a stronger spell. My full quest feels closer.": "Я попробовал заклинание посложнее. До полного задания уже недалеко.",
-  "I found a pace I could keep as I moved closer to my goal.": "Я нашёл посильный темп и стал ближе к своей цели.",
+  "I showed up for another round of training. That effort counts.":
+    "Я снова вышел на тренировку. Каждый такой выход важен.",
+  "I’ve added another completed quest to my spellbook.":
+    "В моём гримуаре появилась запись о новом выполненном задании.",
+  "I made room for one thing that matters today.":
+    "Сегодня нашлось время на то, что для меня важно.",
+  "I’m back on the trail. One small step was enough to start.":
+    "Я снова в пути. Для начала хватило одного маленького шага.",
+  "A tiny spell was enough to get the adventure moving again.":
+    "Одного маленького заклинания хватило, чтобы приключение продолжилось.",
+  "I gave myself a gentler way to return, and it worked.":
+    "Я выбрал мягкий способ вернуться, и у меня получилось.",
+  "I took on a little more today. My next step feels within reach.":
+    "Сегодня я взялся за задачу чуть сложнее. Следующий шаг уже по силам.",
+  "I practiced a stronger spell. My full quest feels closer.":
+    "Я попробовал заклинание посложнее. До полного задания уже недалеко.",
+  "I found a pace I could keep as I moved closer to my goal.":
+    "Я нашёл посильный темп и стал ближе к своей цели.",
+  "Starter habits": "Стартовые привычки",
+  "Pick a starting point. You can edit the details before saving.":
+    "Выберите вариант. Перед сохранением можно изменить название и цель.",
+  Read: "Почитать",
+  "Take a walk": "Прогуляться",
+  "Review notes": "Повторить конспект",
+  "Hero achievements": "Достижения героя",
+  "First step": "Первый шаг",
+  "Complete any habit.": "Выполните любую привычку.",
+  "Three days in a row": "Три дня в строю",
+  "Complete one habit on three consecutive days.":
+    "Выполняйте одну привычку три дня подряд.",
+  "Hero’s comeback": "Возвращение героя",
+  "Complete a recovery micro-quest after a missed day.":
+    "Завершите микроквест после пропуска.",
+  Unlocked: "Открыто",
+  Locked: "Закрыто",
+  "Personal reward": "Личная награда",
+  "Choose something you can treat yourself to after {count} new habit completions.":
+    "Выберите, чем порадуете себя после {count} новых выполнений.",
+  "{current} of {goal} completions": "Выполнения: {current} из {goal}",
+  "Reward unlocked! Time to enjoy it.":
+    "Награда открыта! Пора себя порадовать.",
+  "Reward name": "Название награды",
+  "Set reward": "Сохранить награду",
+  "Could not load your reward": "Не удалось загрузить награду",
+  "Could not save your reward": "Не удалось сохранить награду",
+  "Enter a reward name from 1 to 80 characters":
+    "Введите название награды от 1 до 80 символов",
+  "Finish the current reward goal first": "Сначала получите текущую награду",
+  "Could not load achievements": "Не удалось загрузить достижения",
+  "Recovery funnel": "Воронка восстановления",
+  "Unique users in recovery plans offered in the last 30 days. Demo accounts are excluded.":
+    "Уникальные пользователи, которым предложили восстановление за последние 30 дней. Демо-аккаунты исключены.",
+  "Micro-quest offered": "Микроквест предложен",
+  "Micro-quest accepted": "Микроквест принят",
+  "Micro-quest completed": "Микроквест выполнен",
+  "Original goal restored": "Исходная цель восстановлена",
+  "Could not load recovery funnel":
+    "Не удалось загрузить воронку восстановления",
   "Untrusted request origin": "Запрос отклонён сервером",
   "Request failed ({status})": "Не удалось выполнить запрос (код {status})",
 };

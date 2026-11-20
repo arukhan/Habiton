@@ -7,6 +7,8 @@ import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Pencil, Check, X, LogOut, Palette, ChevronDown, Moon, Sun } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { Achievements } from "@/components/Achievements";
+import { PersonalRewardCard } from "@/components/PersonalRewardCard";
 import { useThemeSettings, type ThemeName } from "@/components/ThemeProvider";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
@@ -121,6 +123,9 @@ export default function Profile() {
       <div><Image src="/images/stat-streak.png" alt={t("Best streak icon")} width={52} height={52}/><small>{t("Best streak")}</small><b>{dayCount(locale, insights?.best_streak || 0)}</b></div>
       <div><Image src="/images/stat-recovery.png" alt={t("Recovery icon")} width={52} height={52}/><small>{t("Recoveries")}</small><b>{insights?.recoveries||0}</b></div>
     </div>
+
+    {insights?.achievements && <Achievements progress={insights.achievements} />}
+    <PersonalRewardCard />
 
     <section className="card">
       <p className="eyebrow">{t("RECOVERY AVAILABILITY")}</p>

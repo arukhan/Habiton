@@ -54,3 +54,8 @@ CREATE TABLE IF NOT EXISTS analytics_events (
  is_demo BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_analytics_name_time ON analytics_events(name,created_at DESC);
+CREATE TABLE IF NOT EXISTS personal_rewards (
+ user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
+ started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);

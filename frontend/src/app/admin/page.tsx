@@ -20,6 +20,14 @@ export default function Admin() {
     const id = setInterval(load, 20000);
     return () => clearInterval(id);
   }, []);
+  const funnel = metrics?.recovery_funnel;
+  const stages = funnel && [
+    { label: "Micro-quest offered", count: funnel.offered },
+    { label: "Micro-quest accepted", count: funnel.accepted },
+    { label: "Micro-quest completed", count: funnel.completed },
+    { label: "Original goal restored", count: funnel.restored },
+  ];
+
   return (
     <Shell navigation={false}>
       <Link className="back-link" href="/profile">
@@ -56,6 +64,24 @@ export default function Admin() {
               </div>
             ))}
           </div>
+          {stages && (
+            <section className="card" aria-labelledby="recovery-funnel-heading">
+              <h2 id="recovery-funnel-heading">{t("Recovery funnel")}</h2>
+              <p className="muted">
+                {t(
+                  "Unique users in recovery plans offered in the last 30 days. Demo accounts are excluded.",
+                )}
+              </p>
+              <ol className="recovery-funnel-stages">
+                {stages.map(({ label, count }) => (
+                  <li className="event-line" key={label}>
+                    <span>{t(label)}</span>
+                    <strong>{count.toLocaleString(locale)}</strong>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <div className="card">
             <h2>{t("Events (last 30 days)")}</h2>
             {metrics.events_last_30_days.map((x) => (

@@ -472,6 +472,28 @@ body {background:var(--outer-bg);color:var(--ink)}
 .theme-settings-note {font-size:10px;color:var(--muted);margin:12px 0 0}
 @media(max-width:370px){.theme-swatch-grid{gap:3px}.theme-swatch-dot{width:29px;height:29px}.theme-swatch{font-size:8px}}
 
+.starter-habit-choices {
+  flex-wrap: wrap;
+}
+
+.starter-habit-choices button {
+  min-width: 100px;
+  padding-inline: 8px;
+}
+
+.personal-reward-progress {
+  display: block;
+  width: 100%;
+  margin: 6px 0;
+  accent-color: var(--accent-strong);
+}
+
+.recovery-funnel-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .hero-log-entries {
   list-style: none;
   padding: 0;
