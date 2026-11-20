@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS habits (
  consecutive_recoveries INT NOT NULL DEFAULT 0,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), archived BOOLEAN NOT NULL DEFAULT FALSE
 );
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+UPDATE habits SET archived_at=now() WHERE archived AND archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
 CREATE TABLE IF NOT EXISTS habit_logs (
  id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

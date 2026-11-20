@@ -3,11 +3,23 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
+
+// The deadline applies until the micro-quest is complete. Later stages stay active.
+const activeRecoveryQuery = `
+	SELECT EXISTS (
+		SELECT 1 FROM recovery_sessions
+		WHERE habit_id=$1 AND (
+			(status IN ('offered','accepted') AND expires_at>clock_timestamp())
+			OR status IN ('micro_completed','step_completed')
+		)
+	)
+`
 
 func clamp(n, min, max int) int {
 	if n < min {
@@ -100,17 +112,13 @@ func (a *App) reportMiss(c *gin.Context) {
 		fail(c, 409, msg)
 		return
 	}
-	var count, active int
-	tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND reported_at>=now()-interval '30 days'`, c.Param("id")).Scan(&count)
-	tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND status IN ('offered','accepted','micro_completed','step_completed') AND expires_at>now()`, c.Param("id")).Scan(&active)
-	if active > 0 {
-		fail(c, 409, "You already have a recovery plan in progress")
+	var active bool
+	if err = tx.QueryRow(ctx, activeRecoveryQuery, c.Param("id")).Scan(&active); err != nil {
+		fail(c, 500, "Could not check recovery status")
 		return
 	}
-	if ok, msg := recoveryEligibility(streak, count, consecutive); !ok {
-		tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, c.Param("id"))
-		tx.Commit(ctx)
-		fail(c, 409, msg)
+	if active {
+		fail(c, 409, "You already have a recovery plan in progress")
 		return
 	}
 	var validHabitDate bool
@@ -137,6 +145,24 @@ func (a *App) reportMiss(c *gin.Context) {
 	tx.QueryRow(ctx, `SELECT count(*) FROM habit_logs WHERE habit_id=$1 AND log_date=$2::date AND kind='full'`, c.Param("id"), v.MissedDate).Scan(&exists)
 	if exists > 0 {
 		fail(c, 409, "You completed this habit on the selected day")
+		return
+	}
+	var count int
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND reported_at>=now()-interval '30 days'`, c.Param("id")).Scan(&count)
+	if err != nil {
+		fail(c, 500, "Could not check recovery limits")
+		return
+	}
+	if ok, msg := recoveryEligibility(streak, count, consecutive); !ok {
+		if _, err = tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, c.Param("id")); err != nil {
+			fail(c, 500, "Could not update streak")
+			return
+		}
+		if err = tx.Commit(ctx); err != nil {
+			fail(c, 500, "Could not save streak")
+			return
+		}
+		fail(c, 409, msg)
 		return
 	}
 	micro, stepText, tmpl := template(category, v.Reason, minutes)
@@ -185,7 +211,7 @@ func (a *App) active(c *gin.Context) {
 		if rows.Scan(&id, &hid, &title, &original, &reason, &status, &mm, &sm, &micro, &step, &streak, &reported, &expires, &missed, &hero, &count) != nil {
 			continue
 		}
-		if expires.Before(time.Now()) && (status == "offered" || status == "accepted") {
+		if !time.Now().Before(expires) && (status == "offered" || status == "accepted") {
 			status = "expired"
 		}
 		logText := ""
@@ -206,18 +232,52 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		return
 	}
 	defer tx.Rollback(ctx)
-	var status, habitID string
-	var expiry time.Time
-	var micro, step, original int
-	err = tx.QueryRow(ctx, `SELECT r.status,r.habit_id::text,r.expires_at,r.micro_minutes,r.step_minutes,h.target_minutes FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id WHERE r.id=$1 AND r.user_id=$2 FOR UPDATE OF r`, c.Param("id"), u.ID).Scan(&status, &habitID, &expiry, &micro, &step, &original)
+	// Lock the habit before reading the recovery state, as in reportMiss and completeHabit.
+	var habitID string
+	var original int
+	err = tx.QueryRow(ctx, `
+		SELECT h.id::text,h.target_minutes
+		FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id
+		WHERE r.id=$1 AND r.user_id=$2 AND NOT h.archived
+		FOR UPDATE OF h
+	`, c.Param("id"), u.ID).Scan(&habitID, &original)
 	if err != nil {
 		fail(c, 404, "Recovery not found")
 		return
 	}
-	if expiry.Before(time.Now()) && (status == "offered" || status == "accepted") {
-		tx.Exec(ctx, `UPDATE recovery_sessions SET status='expired' WHERE id=$1`, c.Param("id"))
-		tx.Exec(ctx, `UPDATE habits SET streak_count=0 WHERE id=$1`, habitID)
-		tx.Commit(ctx)
+	var status string
+	var expiry time.Time
+	var micro, step int
+	err = tx.QueryRow(ctx, `
+		SELECT status,expires_at,micro_minutes,step_minutes
+		FROM recovery_sessions WHERE id=$1 AND user_id=$2
+	`, c.Param("id"), u.ID).Scan(&status, &expiry, &micro, &step)
+	if err != nil {
+		fail(c, 500, "Could not load recovery state")
+		return
+	}
+	if !time.Now().Before(expiry) && (status == "offered" || status == "accepted") {
+		if _, err = tx.Exec(ctx, `UPDATE recovery_sessions SET status='expired' WHERE id=$1`, c.Param("id")); err != nil {
+			fail(c, 500, "Could not expire recovery")
+			return
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE habits SET streak_count=0 WHERE id=$1
+			AND NOT EXISTS (
+				SELECT 1 FROM habit_logs WHERE habit_id=$1 AND kind='full' AND created_at >= $2
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM recovery_sessions WHERE habit_id=$1 AND reported_at >= $2
+			)
+		`, habitID, expiry)
+		if err != nil {
+			fail(c, 500, "Could not update streak")
+			return
+		}
+		if err = tx.Commit(ctx); err != nil {
+			fail(c, 500, "Could not save expired recovery")
+			return
+		}
 		fail(c, 409, "Recovery window expired; history and XP were kept")
 		return
 	}
@@ -231,6 +291,7 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		fail(c, 409, "Complete the previous step first")
 		return
 	}
+	xpAwarded := 0
 	if action != "accept" {
 		var v struct {
 			Confirmed bool
@@ -245,15 +306,17 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 			return
 		}
 		data, _ := json.Marshal(v.Notes)
-		_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,notes) VALUES($1,$2,$3,$4::date,$5,$6,$7) ON CONFLICT(habit_id,log_date,kind) DO UPDATE SET notes=EXCLUDED.notes`, newID(), u.ID, habitID, localDate(), s.kind, s.minutes, data)
+		log, err := tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,notes) VALUES($1,$2,$3,$4::date,$5,$6,$7) ON CONFLICT(habit_id,log_date,kind) DO NOTHING`, newID(), u.ID, habitID, localDate(), s.kind, s.minutes, data)
 		if err != nil {
 			fail(c, 500, "Could not save the check-in")
 			return
 		}
-		_, err = tx.Exec(ctx, `UPDATE users SET xp=xp+$2 WHERE id=$1`, u.ID, s.xp)
-		if err != nil {
-			fail(c, 500, "Could not update XP")
-			return
+		if log.RowsAffected() > 0 {
+			if _, err := tx.Exec(ctx, `UPDATE users SET xp=xp+$2 WHERE id=$1`, u.ID, s.xp); err != nil {
+				fail(c, 500, "Could not update XP")
+				return
+			}
+			xpAwarded = s.xp
 		}
 	}
 	field := "accepted_at"
@@ -285,7 +348,11 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		_, err = tx.Exec(ctx, `UPDATE habits SET consecutive_recoveries=consecutive_recoveries+1 WHERE id=$1`, habitID)
 	}
 	if action == "original" {
-		_, err = tx.Exec(ctx, `UPDATE habits SET streak_count=streak_count+1,best_streak=GREATEST(best_streak,streak_count+1),consecutive_recoveries=0 WHERE id=$1`, habitID)
+		increment := 0
+		if xpAwarded > 0 {
+			increment = 1
+		}
+		_, err = tx.Exec(ctx, `UPDATE habits SET streak_count=streak_count+$2,best_streak=GREATEST(best_streak,streak_count+$2),consecutive_recoveries=0 WHERE id=$1`, habitID, increment)
 	}
 	if err != nil {
 		fail(c, 500, "Could not save progress")
@@ -295,6 +362,6 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		fail(c, 500, "Commit failed")
 		return
 	}
-	a.event(ctx, u, s.event, gin.H{"recovery_id": c.Param("id"), "habit_id": habitID, "xp_awarded": s.xp, "minutes": s.minutes})
-	c.JSON(200, gin.H{"ok": true, "status": s.next, "xp_awarded": s.xp, "hero_log": hero})
+	a.event(ctx, u, s.event, gin.H{"recovery_id": c.Param("id"), "habit_id": habitID, "xp_awarded": xpAwarded, "minutes": s.minutes})
+	c.JSON(200, gin.H{"ok": true, "status": s.next, "xp_awarded": xpAwarded, "hero_log": hero})
 }

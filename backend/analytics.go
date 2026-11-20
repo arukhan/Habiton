@@ -30,8 +30,7 @@ func (a *App) insights(c *gin.Context) {
 	// habits scheduled for that day to have a full log.
 	// For seeded sample history only, the earliest stored log can precede
 	// habits.created_at. LEAST() makes these historical demonstrations visible.
-	// Archived habits are included in history because the current schema does
-	// not store an archived_at timestamp. See README_DAILY_COMPLETION_RU.md.
+	// Retain archived habits on past days and on the archive day if completed.
 	const dailySQL = `
 		WITH days AS (
 			SELECT generate_series(
@@ -41,8 +40,13 @@ func (a *App) insights(c *gin.Context) {
 			)::date AS day
 		)
 		SELECT d.day::text,
-			COUNT(DISTINCT h.id)::int AS total_habits,
-			COUNT(DISTINCT l.habit_id)::int AS completed_habits
+			COUNT(DISTINCT h.id) FILTER (
+				WHERE NOT h.archived OR d.day < (h.archived_at AT TIME ZONE 'Asia/Almaty')::date
+				OR (d.day = (h.archived_at AT TIME ZONE 'Asia/Almaty')::date AND l.habit_id IS NOT NULL)
+			)::int AS total_habits,
+			COUNT(DISTINCT l.habit_id) FILTER (
+				WHERE NOT h.archived OR d.day <= (h.archived_at AT TIME ZONE 'Asia/Almaty')::date
+			)::int AS completed_habits
 		FROM days d
 		LEFT JOIN habits h ON h.user_id=$1
 			AND d.day >= LEAST(

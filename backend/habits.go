@@ -60,7 +60,7 @@ func (a *App) createHabit(c *gin.Context) {
 
 func (a *App) deleteHabit(c *gin.Context) {
 	u, _ := a.current(c)
-	cmd, err := a.DB.Exec(c.Request.Context(), `UPDATE habits SET archived=true WHERE id=$1 AND user_id=$2`, c.Param("id"), u.ID)
+	cmd, err := a.DB.Exec(c.Request.Context(), `UPDATE habits SET archived=true, archived_at=COALESCE(archived_at,now()) WHERE id=$1 AND user_id=$2`, c.Param("id"), u.ID)
 	if err != nil || cmd.RowsAffected() == 0 {
 		fail(c, 404, "Habit not found")
 		return
@@ -83,24 +83,44 @@ func (a *App) completeHabit(c *gin.Context) {
 		fail(c, 404, "Habit not found")
 		return
 	}
+	today := localDate()
 	var existing int
-	err = tx.QueryRow(ctx, `SELECT count(*) FROM habit_logs WHERE habit_id=$1 AND log_date=$2::date AND kind='full'`, c.Param("id"), localDate()).Scan(&existing)
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM habit_logs WHERE habit_id=$1 AND log_date=$2::date AND kind='full'`, c.Param("id"), today).Scan(&existing)
 	if err != nil || existing > 0 {
 		fail(c, 409, "Already completed today")
 		return
 	}
-	var active int
-	tx.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions WHERE habit_id=$1 AND status IN ('offered','accepted','micro_completed','step_completed') AND expires_at>now()`, c.Param("id")).Scan(&active)
-	if active > 0 {
+	var active bool
+	if err = tx.QueryRow(ctx, activeRecoveryQuery, c.Param("id")).Scan(&active); err != nil {
+		fail(c, 500, "Could not check recovery status")
+		return
+	}
+	if active {
 		fail(c, 409, "Finish your active recovery plan first")
 		return
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes) VALUES($1,$2,$3,$4::date,'full',$5)`, newID(), u.ID, c.Param("id"), localDate(), targetMinutes)
+	var completedYesterday bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM habit_logs
+			WHERE habit_id=$1 AND log_date=$2::date - 1 AND kind='full'
+		)
+	`, c.Param("id"), today).Scan(&completedYesterday)
+	if err != nil {
+		fail(c, 500, "Could not check the previous day")
+		return
+	}
+	nextStreak := 1
+	if completedYesterday {
+		nextStreak = streak + 1
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes) VALUES($1,$2,$3,$4::date,'full',$5)`, newID(), u.ID, c.Param("id"), today, targetMinutes)
 	if err != nil {
 		fail(c, 500, "Could not record completion")
 		return
 	}
-	_, err = tx.Exec(ctx, `UPDATE habits SET streak_count=streak_count+1,best_streak=GREATEST(best_streak,streak_count+1),consecutive_recoveries=0 WHERE id=$1`, c.Param("id"))
+	_, err = tx.Exec(ctx, `UPDATE habits SET streak_count=$2,best_streak=GREATEST(best_streak,$2),consecutive_recoveries=0 WHERE id=$1`, c.Param("id"), nextStreak)
 	if err != nil {
 		fail(c, 500, "Could not update streak")
 		return
@@ -115,7 +135,7 @@ func (a *App) completeHabit(c *gin.Context) {
 		return
 	}
 	a.event(ctx, u, "habit_completed", gin.H{"habit_id": c.Param("id"), "xp_awarded": 20})
-	c.JSON(200, gin.H{"ok": true, "streak": streak + 1, "xp_awarded": 20})
+	c.JSON(200, gin.H{"ok": true, "streak": nextStreak, "xp_awarded": 20})
 }
 
 func (a *App) undoCompleteHabit(c *gin.Context) {

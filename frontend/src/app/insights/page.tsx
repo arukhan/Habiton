@@ -11,6 +11,7 @@ export default function Insights() {
   const { insights, habits } = useHabiton();
 
   const history = insights?.history || [];
+  const bestStreak = insights?.best_streak ?? 0;
 
   // One bar per calendar day. Values come from the current user's backend
   // and use the count of completed habits, never minutes.
@@ -69,8 +70,8 @@ export default function Insights() {
         </div>
 
         <p className="muted">
-          {habits.length} habits · Best streak{" "}
-          {insights?.best_streak || 0} days
+          {habits.length} {habits.length === 1 ? "habit" : "habits"} · Best streak{" "}
+          {bestStreak} {bestStreak === 1 ? "day" : "days"}
         </p>
       </div>
 
