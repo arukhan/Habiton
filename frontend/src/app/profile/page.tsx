@@ -1,9 +1,15 @@
 "use client";
 
+import { dayCount, translateError } from "@/lib/translations";
+import { LanguageSelect, useLocale } from "@/context/LocaleContext";
+
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Pencil, Check, X, LogOut, Palette, ChevronDown, Moon, Sun } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { Achievements } from "@/components/Achievements";
+import { PersonalRewardCard } from "@/components/PersonalRewardCard";
 import { useThemeSettings, type ThemeName } from "@/components/ThemeProvider";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
@@ -33,6 +39,8 @@ const palettes: { key: ThemeName; label: string; color: string }[] = [
 const message=(e:unknown)=>e instanceof Error?e.message:"Something went wrong";
 
 export default function Profile() {
+  const { locale, t } = useLocale();
+
   const {user,habits,insights,updateProfile,refresh,logout}=useHabiton();
   const {theme,mode,setTheme,setMode}=useThemeSettings();
   const [themeOpen,setThemeOpen]=useState(false);
@@ -81,114 +89,119 @@ export default function Profile() {
   const limitMap=new Map(limits.map(x=>[x.habit_id,x]));
 
   return <Shell>
-    <p className="eyebrow">YOUR PENGUIN COMPANION</p>
-    <h1>A little more you.</h1>
+    <p className="eyebrow">{t("YOUR PENGUIN COMPANION")}</p>
+    <h1>{t("A little more you.")}</h1>
+    <div className="card form-stack"><LanguageSelect /></div>
+    {user?.is_admin && <Link className="btn-outline" href="/admin">{t("Admin dashboard")}</Link>}
     <div className="card profile-hero">
       <div className="profile-top">
         <div className="profile-penguin">
-          <Image src={penguinImages[selectedClass]} alt={`${selectedClass} Penguin`} width={160} height={160} className="profile-penguin-image" priority/>
+          <Image src={penguinImages[selectedClass]} alt={t("{class} Penguin", { class: t(selectedClass) })} width={160} height={160} className="profile-penguin-image" priority/>
         </div>
         <div className="profile-identity">
-          <span className="level-bubble">Level {user?.level||1}</span>
-          <strong>{user?.name||"Adventurer"}</strong>
-          <small>{selectedClass} · Penguin</small>
+          <span className="level-bubble">{t("Level {count}", { count: user?.level || 1 })}</span>
+          <strong>{user?.name || t("Adventurer")}</strong>
+          <small>{t("{class} · Penguin", { class: t(selectedClass) })}</small>
           <small>{user?.email}</small>
           <button type="button" className="profile-edit-button" onClick={()=>{setEditingName(v=>!v);setError("");setNotice("");}}>
-            <Pencil size={15}/> Edit profile
+            <Pencil size={15}/> {t("Edit profile")}
           </button>
         </div>
       </div>
       {editingName&&<form className="form-stack profile-inline-form" onSubmit={saveName}>
-        <label>Display name<input value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={70} required/></label>
-        <div className="profile-actions"><button type="submit" disabled={busy} className="btn-primary"><Check size={15}/> Save name</button><button type="button" className="btn-outline" onClick={()=>setEditingName(false)}><X size={15}/> Cancel</button></div>
-        <p className="helper-text">Email and password settings will be added in a separate secure update.</p>
+        <label>{t("Display name")}<input value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={70} required/></label>
+        <div className="profile-actions"><button type="submit" disabled={busy} className="btn-primary"><Check size={15}/> {t("Save name")}</button><button type="button" className="btn-outline" onClick={()=>setEditingName(false)}><X size={15}/> {t("Cancel")}</button></div>
+        <p className="helper-text">{t("Email and password settings will be added in a separate secure update.")}</p>
       </form>}
-      <p className="eyebrow">CHOOSE YOUR PATH</p>
-      <div className="class-choices">{(["Warrior","Mage","Priest"] as const).map(cls=><button key={cls} type="button" className={selectedClass===cls?"selected":""} onClick={()=>void selectClass(cls)}>{cls==="Warrior"?"⚔️":cls==="Mage"?"🪄":"🌿"} {cls}</button>)}</div>
-      <p className="class-description">{descriptions[selectedClass]}</p>
-      <div className="flex-between small-note"><span>XP {user?.xp_in_level||0} / {user?.xp_next||100}</span><span>Level {user?.level||1}</span></div>
+      <p className="eyebrow">{t("CHOOSE YOUR PATH")}</p>
+      <div className="class-choices">{(["Warrior","Mage","Priest"] as const).map(cls=><button key={cls} type="button" className={selectedClass===cls?"selected":""} onClick={()=>void selectClass(cls)}>{cls==="Warrior"?"⚔️":cls==="Mage"?"🪄":"🌿"} {t(cls)}</button>)}</div>
+      <p className="class-description">{t(descriptions[selectedClass])}</p>
+      <div className="flex-between small-note"><span>XP {user?.xp_in_level||0} / {user?.xp_next||100}</span><span>{t("Level {count}", { count: user?.level || 1 })}</span></div>
       <div className="progress"><div style={{width:`${Math.min(100,((user?.xp_in_level||0)/(user?.xp_next||100))*100)}%`}}/></div>
     </div>
 
     <div className="stat-row boxed profile-stats">
-      <div><Image src="/images/stat-habits.png" alt="Habits icon" width={52} height={52}/><small>Habits</small><b>{habits.length}</b></div>
-      <div><Image src="/images/stat-streak.png" alt="Best streak icon" width={52} height={52}/><small>Best streak</small><b>{insights?.best_streak||0} days</b></div>
-      <div><Image src="/images/stat-recovery.png" alt="Recovery icon" width={52} height={52}/><small>Recoveries</small><b>{insights?.recoveries||0}</b></div>
+      <div><Image src="/images/stat-habits.png" alt={t("Habits icon")} width={52} height={52}/><small>{t("Habits")}</small><b>{habits.length}</b></div>
+      <div><Image src="/images/stat-streak.png" alt={t("Best streak icon")} width={52} height={52}/><small>{t("Best streak")}</small><b>{dayCount(locale, insights?.best_streak || 0)}</b></div>
+      <div><Image src="/images/stat-recovery.png" alt={t("Recovery icon")} width={52} height={52}/><small>{t("Recoveries")}</small><b>{insights?.recoveries||0}</b></div>
     </div>
 
+    {insights?.achievements && <Achievements progress={insights.achievements} />}
+    <PersonalRewardCard />
+
     <section className="card">
-      <p className="eyebrow">RECOVERY AVAILABILITY</p>
-      <h2>Recoveries left by habit</h2>
-      <p className="muted">Each habit allows up to 3 recovery attempts in a rolling 30-day window. Other eligibility rules still apply.</p>
-      {habits.length===0?<p className="muted">Create your first habit to see its recovery limits.</p>:
+      <p className="eyebrow">{t("RECOVERY AVAILABILITY")}</p>
+      <h2>{t("Recoveries left by habit")}</h2>
+      <p className="muted">{t("Each habit allows up to 3 recovery attempts in a rolling 30-day window. Other eligibility rules still apply.")}</p>
+      {habits.length===0?<p className="muted">{t("Create your first habit to see its recovery limits.")}</p>:
         habits.map(h=>{
           const l=limitMap.get(h.id);const remaining=l?.remaining;
           return <div className="profile-limit-row" key={h.id}>
-            <div className="flex-between"><strong>{h.title}</strong><span>{remaining===undefined?"—":`${remaining}/3 left`}</span></div>
+            <div className="flex-between"><strong>{h.title}</strong><span>{remaining===undefined?"—":t("{count}/3 left", {count: remaining})}</span></div>
             <div className="profile-limit-track"><div style={{width:`${(remaining??0)/3*100}%`}}/></div>
           </div>;
         })}
     </section>
 
     <section className="card">
-      <p className="eyebrow">MY HABITS</p>
-      <h2>Manage your habits</h2>
-      {habits.length===0?<p className="muted">No habits yet.</p>:habits.map(h=><div className="profile-habit-row" key={h.id}>
-        <div><strong>{h.title}</strong><small>{h.category} · {h.target_minutes} min daily</small></div>
-        <button type="button" className="profile-edit-button" onClick={()=>openHabit(h)}><Pencil size={15}/> Edit</button>
+      <p className="eyebrow">{t("MY HABITS")}</p>
+      <h2>{t("Manage your habits")}</h2>
+      {habits.length===0?<p className="muted">{t("No habits yet.")}</p>:habits.map(h=><div className="profile-habit-row" key={h.id}>
+        <div><strong>{h.title}</strong><small>{t(h.category)} · {t("{count} min daily", {count: h.target_minutes})}</small></div>
+        <button type="button" className="profile-edit-button" onClick={()=>openHabit(h)}><Pencil size={15}/> {t("Edit")}</button>
       </div>)}
     </section>
 
-    {editingHabit&&<section className="card profile-edit-card" aria-label="Edit habit">
-      <div className="flex-between"><h2>Edit habit</h2><button type="button" className="text-button" onClick={()=>setEditingHabit(null)}><X size={16}/> Close</button></div>
+    {editingHabit&&<section className="card profile-edit-card" aria-label={t("Edit habit")}>
+      <div className="flex-between"><h2>{t("Edit habit")}</h2><button type="button" className="text-button" onClick={()=>setEditingHabit(null)}><X size={16}/> {t("Close")}</button></div>
       <form onSubmit={saveHabit} className="form-stack">
-        <label>Habit name<input value={title} onChange={e=>setTitle(e.target.value)} minLength={2} maxLength={100} required/></label>
-        <label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{Array.from(new Set([...categories,category])).map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-        <label>Daily goal<select value={customMinutes?"custom":String(minutes)} onChange={e=>{if(e.target.value==="custom")setCustomMinutes(true);else {setCustomMinutes(false);setMinutes(Number(e.target.value));}}}>
-          {minuteOptions.map(m=><option key={m} value={String(m)}>{m} minutes</option>)}<option value="custom">Custom minutes</option>
+        <label>{t("Habit name")}<input value={title} onChange={e=>setTitle(e.target.value)} minLength={2} maxLength={100} required/></label>
+        <label>{t("Category")}<select value={category} onChange={e=>setCategory(e.target.value)}>{Array.from(new Set([...categories,category])).map(v=><option key={v} value={v}>{t(v)}</option>)}</select></label>
+        <label>{t("Daily goal")}<select value={customMinutes?"custom":String(minutes)} onChange={e=>{if(e.target.value==="custom")setCustomMinutes(true);else {setCustomMinutes(false);setMinutes(Number(e.target.value));}}}>
+          {minuteOptions.map(m=><option key={m} value={String(m)}>{t("{count} minutes", {count: m})}</option>)}<option value="custom">{t("Custom minutes")}</option>
         </select></label>
-        {customMinutes&&<label>Custom goal in minutes<input type="number" min={1} max={1440} value={minutes} onChange={e=>setMinutes(Number(e.target.value))} required/></label>}
-        <p className="helper-text">New goal applies to future check-ins. You cannot edit a habit while an active recovery plan is running.</p>
-        <div className="profile-actions"><button className="btn-primary" type="submit" disabled={busy}>{busy?"Saving...":"Save changes"}</button><button type="button" className="btn-outline" onClick={()=>setEditingHabit(null)}>Cancel</button></div>
+        {customMinutes&&<label>{t("Custom goal in minutes")}<input type="number" min={1} max={1440} value={minutes} onChange={e=>setMinutes(Number(e.target.value))} required/></label>}
+        <p className="helper-text">{t("New goal applies to future check-ins. You cannot edit a habit while an active recovery plan is running.")}</p>
+        <div className="profile-actions"><button className="btn-primary" type="submit" disabled={busy}>{busy?t("Saving..."):t("Save changes")}</button><button type="button" className="btn-outline" onClick={()=>setEditingHabit(null)}>{t("Cancel")}</button></div>
       </form>
     </section>}
 
-    <section className="card"><p className="eyebrow">YOUR GROWTH</p><h2>How you earn XP</h2>
-      <div className="profile-xp-row"><span>✅ Complete a habit</span><b>+20 XP</b></div>
-      <div className="profile-xp-row"><span>✨ Complete a micro-quest</span><b>+10 XP</b></div>
-      <div className="profile-xp-row"><span>🌱 Complete a step-up</span><b>+10 XP</b></div>
-      <p className="muted">No leaderboards. Your only competition is yesterday.</p>
+    <section className="card"><p className="eyebrow">{t("YOUR GROWTH")}</p><h2>{t("How you earn XP")}</h2>
+      <div className="profile-xp-row"><span>{t("✅ Complete a habit")}</span><b>+20 XP</b></div>
+      <div className="profile-xp-row"><span>{t("✨ Complete a micro-quest")}</span><b>+10 XP</b></div>
+      <div className="profile-xp-row"><span>{t("🌱 Complete a step-up")}</span><b>+10 XP</b></div>
+      <p className="muted">{t("No leaderboards. Your only competition is yesterday.")}</p>
     </section>
 
-    <section className="card theme-settings-card" aria-label="Appearance settings">
-      <p className="eyebrow">YOUR SPACE</p>
-      <h2>Appearance</h2>
+    <section className="card theme-settings-card" aria-label={t("Appearance settings")}>
+      <p className="eyebrow">{t("YOUR SPACE")}</p>
+      <h2>{t("Appearance")}</h2>
       <button type="button" className="theme-settings-trigger" aria-expanded={themeOpen} onClick={()=>setThemeOpen(v=>!v)}>
         <Palette size={19} aria-hidden="true"/>
-        <span>Customize theme</span>
+        <span>{t("Customize theme")}</span>
         <ChevronDown size={17} aria-hidden="true" style={{transform:themeOpen?"rotate(180deg)":undefined}}/>
       </button>
       {themeOpen&&<div className="theme-settings-panel">
-        <h3>Choose your color</h3>
-        <div className="theme-swatch-grid" role="group" aria-label="Color palettes">
+        <h3>{t("Choose your color")}</h3>
+        <div className="theme-swatch-grid" role="group" aria-label={t("Color palettes")}>
           {palettes.map(p=><button key={p.key} type="button" className="theme-swatch" aria-pressed={theme===p.key} onClick={()=>setTheme(p.key)}>
             <span className="theme-swatch-dot" style={{background:p.color}}>{theme===p.key?<Check size={17}/>:null}</span>
-            <span>{p.label}</span>
+            <span>{t(p.label)}</span>
           </button>)}
         </div>
         <div className="theme-mode-row">
-          <span className="theme-mode-label">{mode==="dark"?<Moon size={17}/>:<Sun size={17}/>} Dark mode</span>
+          <span className="theme-mode-label">{mode==="dark"?<Moon size={17}/>:<Sun size={17}/>} {t("Dark mode")}</span>
           <button type="button" className="theme-mode-toggle" role="switch" aria-checked={mode==="dark"} onClick={()=>setMode(mode==="dark"?"light":"dark")}>
-            {mode==="dark"?"On":"Off"}
+            {mode==="dark"?t("On"):t("Off")}
           </button>
         </div>
-        <p className="theme-settings-note">Saved automatically on this device. The same colors apply to Today, Recovery, Insights and Profile.</p>
+        <p className="theme-settings-note">{t("Saved automatically on this device. The same colors apply to Today, Recovery, Insights and Profile.")}</p>
       </div>}
     </section>
 
-    {notice&&<p className="profile-notice" role="status">{notice}</p>}
-    {error&&<p className="error" role="alert">{error}</p>}
-    <button className="logout" onClick={()=>void logout()}><LogOut size={18}/> Log out</button>
-    <p className="footer-note">Your pace. Your space. Every day.</p>
+    {notice&&<p className="profile-notice" role="status">{t(notice)}</p>}
+    {error&&<p className="error" role="alert">{translateError(locale, error)}</p>}
+    <button className="logout" onClick={()=>void logout()}><LogOut size={18}/> {t("Log out")}</button>
+    <p className="footer-note">{t("Your pace. Your space. Every day.")}</p>
   </Shell>;
 }

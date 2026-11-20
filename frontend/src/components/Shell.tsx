@@ -1,6 +1,9 @@
 
 "use client";
 
+import { translateError } from "@/lib/translations";
+import { useLocale } from "@/context/LocaleContext";
+
 import Image from "next/image";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -20,6 +23,8 @@ export function Shell({
   title = "HABITON ✦",
   navigation = true,
 }: ShellProps) {
+  const { locale, t } = useLocale();
+
   const { user, loading, error } = useHabiton();
   const router = useRouter();
 
@@ -35,7 +40,7 @@ export function Shell({
     return (
       <div className="full-loading">
         <Penguin mood="thinking" />
-        <h2>Getting your quests ready...</h2>
+        <h2>{t("Getting your quests ready...")}</h2>
       </div>
     );
   }
@@ -44,7 +49,7 @@ export function Shell({
   if (!user) {
     return (
       <div className="full-loading">
-        Redirecting to login...
+        {t("Redirecting to login...")}
       </div>
     );
   }
@@ -59,7 +64,7 @@ export function Shell({
           <span className="top-avatar">
             <Image
               src="/penguin-icon.png"
-              alt="Habiton Penguin"
+              alt={t("Habiton Penguin")}
               width={48}
               height={48}
               className="top-avatar-image"
@@ -73,7 +78,7 @@ export function Shell({
 
           {error && (
             <div role="alert" className="error">
-              {error}
+              {translateError(locale, error)}
             </div>
           )}
 
@@ -85,7 +90,7 @@ export function Shell({
       </div>
 
       <p className="desktop-tip">
-        Habiton · A little, every day. 🌱
+        {t("Habiton · A little, every day. 🌱")}
       </p>
     </main>
   );

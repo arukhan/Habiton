@@ -1,6 +1,8 @@
 
 "use client";
 
+import { useLocale } from "@/context/LocaleContext";
+
 import Image from "next/image";
 import { useHabiton } from "@/context/AppContext";
 
@@ -78,6 +80,8 @@ export function Penguin({
   size = "md",
   caption = false,
 }: PenguinProps) {
+  const { t } = useLocale();
+
   const { user } = useHabiton();
 
   const setting = settings[mood];
@@ -97,12 +101,12 @@ export function Penguin({
   return (
     <div
       className={`penguin-holder penguin-${mood} penguin-${size}`}
-      aria-label={`${setting.title}. ${setting.line}`}
+      aria-label={`${t(setting.title)} ${t(setting.line)}`}
     >
       <div className="penguin-photo">
         <Image
           src={imageSrc}
-          alt={`${mood === "hero" ? heroClass : mood} Habiton penguin`}
+          alt={t("Habiton Penguin")}
           width={260}
           height={260}
           priority={mood === "hello"}
@@ -111,8 +115,8 @@ export function Penguin({
 
       {caption && (
         <div className="penguin-caption">
-          <strong>{setting.title}</strong>
-          <small>{setting.line}</small>
+          <strong>{t(setting.title)}</strong>
+          <small>{t(setting.line)}</small>
         </div>
       )}
     </div>

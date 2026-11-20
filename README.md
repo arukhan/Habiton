@@ -46,6 +46,12 @@ Demo accounts are excluded from real-user metrics and Amplitude forwarding. For 
 | `/insights` | Session history and charts |
 | `/admin` | Admin-only KPI dashboard |
 
+## Admin dashboard
+
+The dashboard opens from **Profile → Admin dashboard** for the configured administrator account. Set `ADMIN_USER_ID` on the Go backend to the UUID of a trusted existing, non-demo account. For an existing deployment, `ADMIN_EMAIL` still works when `ADMIN_USER_ID` is unset. In that case use an email for a trusted account that already exists. Public registration cannot use the configured admin email.
+
+The dashboard shows aggregated 7- and 30-day reports using the Asia/Almaty calendar. Demo accounts are excluded. The recovery funnel counts unique users offered a plan during the period. The 48-hour KPI counts eligible reports with elapsed windows in that cohort and requires a completion before the deadline. Open windows are shown separately. D7 retention counts accounts whose seventh local calendar day fell in the period and has ended, and checks for recorded activity on that day.
+
 ## Recovery rules
 
 1. A habit must have an existing streak >=3 days to qualify.

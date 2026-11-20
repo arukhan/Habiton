@@ -1,10 +1,6 @@
 package main
 
-import (
-	"github.com/gin-gonic/gin"
-	"os"
-	"strings"
-)
+import "github.com/gin-gonic/gin"
 
 func (a *App) insights(c *gin.Context) {
 	u, _ := a.current(c)
@@ -13,6 +9,21 @@ func (a *App) insights(c *gin.Context) {
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='full'`, u.ID).Scan(&full)
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='recovery'`, u.ID).Scan(&recovery)
 	a.DB.QueryRow(c.Request.Context(), `SELECT count(*) FROM habit_logs WHERE user_id=$1 AND kind='step_up'`, u.ID).Scan(&step)
+	var threeDays bool
+	const streakAchievementSQL = `
+		SELECT EXISTS (
+			SELECT 1 FROM habit_logs current_log
+			JOIN habit_logs previous_day ON previous_day.habit_id=current_log.habit_id
+				AND previous_day.log_date=current_log.log_date-1 AND previous_day.kind='full'
+			JOIN habit_logs two_days_ago ON two_days_ago.habit_id=current_log.habit_id
+				AND two_days_ago.log_date=current_log.log_date-2 AND two_days_ago.kind='full'
+			WHERE current_log.user_id=$1 AND current_log.kind='full'
+		)
+	`
+	if err := a.DB.QueryRow(c.Request.Context(), streakAchievementSQL, u.ID).Scan(&threeDays); err != nil {
+		fail(c, 500, "Could not load achievements")
+		return
+	}
 	rows, err := a.DB.Query(c.Request.Context(), `SELECT l.log_date::text,l.kind,CASE WHEN l.kind='full' AND l.minutes=0 THEN h.target_minutes ELSE l.minutes END,h.title FROM habit_logs l JOIN habits h ON h.id=l.habit_id WHERE l.user_id=$1 ORDER BY l.log_date DESC,l.created_at DESC LIMIT 35`, u.ID)
 	items := []gin.H{}
 	if err == nil {
@@ -30,8 +41,7 @@ func (a *App) insights(c *gin.Context) {
 	// habits scheduled for that day to have a full log.
 	// For seeded sample history only, the earliest stored log can precede
 	// habits.created_at. LEAST() makes these historical demonstrations visible.
-	// Archived habits are included in history because the current schema does
-	// not store an archived_at timestamp. See README_DAILY_COMPLETION_RU.md.
+	// Retain archived habits on past days and on the archive day if completed.
 	const dailySQL = `
 		WITH days AS (
 			SELECT generate_series(
@@ -41,8 +51,13 @@ func (a *App) insights(c *gin.Context) {
 			)::date AS day
 		)
 		SELECT d.day::text,
-			COUNT(DISTINCT h.id)::int AS total_habits,
-			COUNT(DISTINCT l.habit_id)::int AS completed_habits
+			COUNT(DISTINCT h.id) FILTER (
+				WHERE NOT h.archived OR d.day < (h.archived_at AT TIME ZONE 'Asia/Almaty')::date
+				OR (d.day = (h.archived_at AT TIME ZONE 'Asia/Almaty')::date AND l.habit_id IS NOT NULL)
+			)::int AS total_habits,
+			COUNT(DISTINCT l.habit_id) FILTER (
+				WHERE NOT h.archived OR d.day <= (h.archived_at AT TIME ZONE 'Asia/Almaty')::date
+			)::int AS completed_habits
 		FROM days d
 		LEFT JOIN habits h ON h.user_id=$1
 			AND d.day >= LEAST(
@@ -95,37 +110,6 @@ func (a *App) insights(c *gin.Context) {
 		"recoveries": recovery, "step_ups": step,
 		"best_streak": best, "history": items,
 		"daily_completion": daily, "perfect_days": perfectDays,
+		"achievements": gin.H{"first_step": full > 0, "three_days": threeDays, "comeback": recovery > 0},
 	})
-}
-
-func (a *App) adminMetrics(c *gin.Context) {
-	u, _ := a.current(c)
-	if strings.ToLower(u.Email) != strings.ToLower(os.Getenv("ADMIN_EMAIL")) || os.Getenv("ADMIN_EMAIL") == "" {
-		fail(c, 403, "Admin access only")
-		return
-	}
-	var users, habits, misses, recovered, eligible int
-	ctx := c.Request.Context()
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM users WHERE NOT is_demo`).Scan(&users)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM habits h JOIN users u ON h.user_id=u.id WHERE NOT u.is_demo`).Scan(&habits)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo`).Scan(&misses)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo AND r.streak_before>=3 AND r.reported_at<=now()-interval '48 hours'`).Scan(&eligible)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo AND r.streak_before>=3 AND r.reported_at<=now()-interval '48 hours' AND r.micro_completed_at IS NOT NULL AND r.micro_completed_at<=r.reported_at+interval '48 hours'`).Scan(&recovered)
-	rate := 0.0
-	if eligible > 0 {
-		rate = 100 * float64(recovered) / float64(eligible)
-	}
-	rows, err := a.DB.Query(ctx, `SELECT name,count(*) FROM analytics_events WHERE NOT is_demo AND created_at>now()-interval '30 days' GROUP BY name ORDER BY count(*) DESC`)
-	events := []gin.H{}
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var name string
-			var n int
-			if rows.Scan(&name, &n) == nil {
-				events = append(events, gin.H{"name": name, "count": n})
-			}
-		}
-	}
-	c.JSON(200, gin.H{"real_users": users, "habits_created": habits, "missed_reports": misses, "eligible_matured": eligible, "recovered_within_48h": recovered, "recovery_rate_percent": rate, "events_last_30_days": events, "excluded_demo_accounts": true})
 }

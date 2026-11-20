@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS habits (
  consecutive_recoveries INT NOT NULL DEFAULT 0,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), archived BOOLEAN NOT NULL DEFAULT FALSE
 );
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+UPDATE habits SET archived_at=now() WHERE archived AND archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
 CREATE TABLE IF NOT EXISTS habit_logs (
  id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -52,3 +54,8 @@ CREATE TABLE IF NOT EXISTS analytics_events (
  is_demo BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_analytics_name_time ON analytics_events(name,created_at DESC);
+CREATE TABLE IF NOT EXISTS personal_rewards (
+ user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
+ started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);

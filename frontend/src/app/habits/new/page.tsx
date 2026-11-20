@@ -1,5 +1,8 @@
 "use client";
 
+import { translateError } from "@/lib/translations";
+import { useLocale } from "@/context/LocaleContext";
+
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,8 +12,15 @@ import { API } from "@/lib/api";
 import { useHabiton } from "@/context/AppContext";
 
 const MINUTE_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
+const starterHabits = [
+  { title: "Read", category: "Reading", minutes: 10 },
+  { title: "Take a walk", category: "Fitness", minutes: 15 },
+  { title: "Review notes", category: "Study", minutes: 10 },
+];
 
 export default function CreateHabit() {
+  const { locale, t } = useLocale();
+
   const router = useRouter();
   const { refresh } = useHabiton();
   const [title, setTitle] = useState("");
@@ -19,6 +29,14 @@ export default function CreateHabit() {
   const [customMinutes, setCustomMinutes] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  function chooseStarter(starter: (typeof starterHabits)[number]) {
+    setTitle(t(starter.title));
+    setCategory(starter.category);
+    setTarget(starter.minutes);
+    setCustomMinutes(false);
+    setError("");
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -41,28 +59,70 @@ export default function CreateHabit() {
 
   return (
     <Shell navigation={false}>
-      <Link href="/today" className="back-link">← Today</Link>
+      <Link href="/today" className="back-link">
+        {t("← Today")}
+      </Link>
       <Penguin mood="hero" size="sm" />
-      <p className="eyebrow">NEW ADVENTURE</p>
-      <h1>Start with one small habit.</h1>
-      <p className="muted">Choose a goal that fits your real life. You can grow it later.</p>
+      <p className="eyebrow">{t("NEW ADVENTURE")}</p>
+      <h1>{t("Start with one small habit.")}</h1>
+      <p className="muted">
+        {t("Choose a goal that fits your real life. You can grow it later.")}
+      </p>
+
+      <section className="card" aria-labelledby="starter-habits-heading">
+        <h2 id="starter-habits-heading">{t("Starter habits")}</h2>
+        <p className="muted">
+          {t("Pick a starting point. You can edit the details before saving.")}
+        </p>
+        <div className="class-choices starter-habit-choices">
+          {starterHabits.map((starter) => (
+            <button
+              key={starter.title}
+              type="button"
+              disabled={busy}
+              onClick={() => chooseStarter(starter)}
+            >
+              {t(starter.title)} ·{" "}
+              {t("{count} min", { count: starter.minutes })}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <form className="form-stack space-top" onSubmit={submit}>
         <label>
-          Habit name
-          <input value={title} required minLength={2} maxLength={100}
-            placeholder="Read for 20 minutes" onChange={(e) => setTitle(e.target.value)} />
+          {t("Habit name")}
+          <input
+            value={title}
+            required
+            minLength={2}
+            maxLength={100}
+            placeholder={t("Read for 20 minutes")}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </label>
         <label>
-          Category
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {["Study", "Reading", "Fitness", "Health", "Mindfulness", "Other"].map((v) => (
-              <option key={v} value={v}>{v}</option>
+          {t("Category")}
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {[
+              "Study",
+              "Reading",
+              "Fitness",
+              "Health",
+              "Mindfulness",
+              "Other",
+            ].map((v) => (
+              <option key={v} value={v}>
+                {t(v)}
+              </option>
             ))}
           </select>
         </label>
         <label>
-          Daily goal in minutes
+          {t("Daily goal in minutes")}
           <select
             value={customMinutes ? "custom" : String(target)}
             onChange={(e) => {
@@ -74,26 +134,44 @@ export default function CreateHabit() {
               }
             }}
           >
-            {MINUTE_OPTIONS.map((n) => <option key={n} value={n}>{n} minutes</option>)}
-            <option value="custom">Custom minutes…</option>
+            {MINUTE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {t("{count} minutes", { count: n })}
+              </option>
+            ))}
+            <option value="custom">{t("Custom minutes…")}</option>
           </select>
         </label>
         {customMinutes && (
           <label>
-            Custom goal (1–1440 minutes)
-            <input type="number" min={1} max={1440} step={1} required
-              value={target} onChange={(e) => setTarget(Number(e.target.value))} />
+            {t("Custom goal (1–1440 minutes)")}
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              step={1}
+              required
+              value={target}
+              onChange={(e) => setTarget(Number(e.target.value))}
+            />
           </label>
         )}
         <div className="gentle-message">
-          💜 Consistency is not perfection. If you miss a day after building a streak,
-          Habiton can offer a smaller recovery quest.
+          {t(
+            "💜 Consistency is not perfection. If you miss a day after building a streak, Habiton can offer a smaller recovery quest.",
+          )}
         </div>
         <button type="submit" disabled={busy} className="btn-primary">
-          {busy ? "Saving..." : "Create habit"}
+          {busy ? t("Saving...") : t("Create habit")}
         </button>
-        <Link href="/today" className="btn-outline">Cancel</Link>
-        {error && <p className="error" role="alert">{error}</p>}
+        <Link href="/today" className="btn-outline">
+          {t("Cancel")}
+        </Link>
+        {error && (
+          <p className="error" role="alert">
+            {translateError(locale, error)}
+          </p>
+        )}
       </form>
     </Shell>
   );

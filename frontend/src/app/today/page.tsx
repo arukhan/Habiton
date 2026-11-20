@@ -1,6 +1,9 @@
 
 "use client";
 
+import { translateError } from "@/lib/translations";
+import { useLocale } from "@/context/LocaleContext";
+
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -17,10 +20,12 @@ import { Shell } from "@/components/Shell";
 import { HabitCard } from "@/components/HabitCard";
 import { API } from "@/lib/api";
 import { useHabiton } from "@/context/AppContext";
-import { localDay } from "@/lib/dates";
+import { localDay, niceDate } from "@/lib/dates";
 import type { WeekDay, Habit } from "@/types";
 
 export default function Today() {
+  const { locale, t } = useLocale();
+
   const {
     user,
     habits,
@@ -135,24 +140,22 @@ export default function Today() {
       <div className="welcome-row">
         <div>
           <div className="eyebrow">
-            YOUR DAILY ADVENTURE
+            {t("YOUR DAILY ADVENTURE")}
           </div>
 
           <h1>
-            Back on track,{" "}
-            {user?.name?.split(" ")[0] || "Adventurer"}.
+            {t("Back on track, {name}.", { name: user?.name?.split(" ")[0] || t("Adventurer") })}
           </h1>
 
           <p className="muted">
-            One step counts. Your penguin
-            is cheering for you.
+            {t("One step counts. Your penguin is cheering for you.")}
           </p>
         </div>
 
         <div className="today-penguin">
           <Image
             src="/images/penguin-today.png"
-            alt="Happy Habiton penguin"
+            alt={t("Happy Habiton penguin")}
             width={120}
             height={120}
             className="today-penguin-image"
@@ -165,11 +168,11 @@ export default function Today() {
       <div className="game-strip">
         <span>
           <Flame size={18} />
-          {streak}-day streak
+          {t("{count}-day streak", {count: streak})}
         </span>
 
         <span>
-          ⭐ Level {user?.level ?? 1}
+          ⭐ {t("Level {count}", { count: user?.level ?? 1 })}
         </span>
 
         <div className="game-strip-progress">
@@ -186,10 +189,10 @@ export default function Today() {
       </div>
 
       {/* Week calendar */}
-      <div className="weekday-row" aria-label="Habits for this week">
+      <div className="weekday-row" aria-label={t("Habits for this week")}>
         {weekDays.map((day) => {
           const utc = new Date(`${day.date}T12:00:00Z`);
-          const label = utc.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+          const label = utc.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { weekday: "short", timeZone: "UTC" });
           return (
             <button
               key={day.date}
@@ -197,9 +200,9 @@ export default function Today() {
               className={`weekday ${selectedDay === day.date ? "active" : ""}`}
               onClick={() => setSelectedDay(day.date)}
               aria-pressed={selectedDay === day.date}
-              aria-label={`View ${day.date}`}
+              aria-label={t("View {date}", { date: locale === "ru" ? niceDate(day.date, locale) : day.date })}
             >
-              <span>{label.slice(0, 1)}</span>
+              <span>{locale === "ru" ? label : label.slice(0, 1)}</span>
               <strong>{utc.getUTCDate()}</strong>
             </button>
           );
@@ -210,40 +213,37 @@ export default function Today() {
       {recovery ? (
         <section className="card recovery-home">
           <span className="card-label">
-            YOUR RECOVERY IS READY
+            {t("YOUR RECOVERY IS READY")}
           </span>
 
-          <h2>Let's build back gently</h2>
+          <h2>{t("Let's build back gently")}</h2>
 
           <p className="muted">
-            {recovery.habit_title}: start small,
-            then return to your goal.
+            {t("{habit}: start small, then return to your goal.", { habit: recovery.habit_title })}
           </p>
 
           <Link
             className="btn-orange"
             href={`/recovery/${recovery.id}`}
           >
-            Continue recovery
+            {t("Continue recovery")}
             <ArrowRight size={17} />
           </Link>
 
           <p className="helper-text">
-            {recovery.remaining_windows} of 3
-            recoveries still available
+            {t("{count} of 3 recoveries still available", { count: recovery.remaining_windows })}
           </p>
         </section>
       ) : (
         <section className="card recovery-home">
           <span className="card-label">
-            MISSED A DAY?
+            {t("MISSED A DAY?")}
           </span>
 
-          <h2>A miss is a moment, not the end.</h2>
+          <h2>{t("A miss is a moment, not the end.")}</h2>
 
           <p className="muted">
-            Keep what you've built.
-            Return with a smaller micro-quest.
+            {t("Keep what you've built. Return with a smaller micro-quest.")}
           </p>
 
           {eligible ? (
@@ -251,30 +251,28 @@ export default function Today() {
               href="/recovery/report"
               className="btn-orange"
             >
-              ⚡ Report a missed day
+              {t("⚡ Report a missed day")}
               <ArrowRight size={16} />
             </Link>
           ) : (
             <div className="gentle-message">
               <Sparkles size={16} />
-              Recovery unlocks after
-              3 completed days. Keep going!
+              {t("Recovery unlocks after 3 completed days. Keep going!")}
             </div>
           )}
 
           <p className="helper-text">
-            Your history and earned XP
-            are always kept.
+            {t("Your history and earned XP are always kept.")}
           </p>
         </section>
       )}
 
       {/* Habit list */}
       <div className="section-heading">
-        <h2>{isToday ? "Your habits" : `Habits · ${selectedDay}`}</h2>
+        <h2>{isToday ? t("Your habits") : t("Habits · {date}", { date: locale === "ru" ? niceDate(selectedDay, locale) : selectedDay })}</h2>
 
         {isToday && <Link className="text-button" href="/habits/new">
-          <Plus size={16} /> New habit
+          <Plus size={16} /> {t("New habit")}
         </Link>}
       </div>
 
@@ -293,7 +291,7 @@ export default function Today() {
           onArchive={isToday ? () => {
             if (
               window.confirm(
-                `Archive ${habit.title}? Your history remains saved.`
+                t("Archive {habit}? Your history remains saved.", { habit: habit.title })
               )
             ) {
               void perform(() =>
@@ -309,11 +307,11 @@ export default function Today() {
         <div className="empty">
           <BookOpen />
 
-          <h3>{isToday ? "Your story starts with one habit." :
-            "No habits were scheduled for this day."}</h3>
+          <h3>{isToday ? t("Your story starts with one habit.") :
+            t("No habits were scheduled for this day.")}</h3>
 
           {isToday && <Link href="/habits/new" className="btn-primary">
-            Create your first habit
+            {t("Create your first habit")}
           </Link>}
 
         </div>
@@ -322,32 +320,30 @@ export default function Today() {
       {/* Errors */}
       {error && (
         <div className="error" role="alert">
-          {error}
+          {translateError(locale, error)}
         </div>
       )}
 
       {/* Recovery history */}
       {recoveries.length > 0 && (
         <section className="recent-recovery">
-          <h3>Recovery journey</h3>
+          <h3>{t("Recovery journey")}</h3>
 
           <p>
-            Your completed quests stay
-            in your history.
+            {t("Your completed quests stay in your history.")}
           </p>
 
           <Link
             href={`/recovery/${recoveries[0].id}`}
           >
-            Open latest recovery →
+            {t("Open latest recovery →")}
           </Link>
         </section>
       )}
 
       {/* Footer */}
       <p className="footer-note">
-        🐧 Progress is personal.
-        No leaderboards, no punishment.
+        {t("🐧 Progress is personal. No leaderboards, no punishment.")}
       </p>
     </Shell>
   );

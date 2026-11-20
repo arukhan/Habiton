@@ -93,6 +93,8 @@ func main() {
 	secure.POST("/auth/logout", a.logout)
 	secure.GET("/me", a.me)
 	secure.PATCH("/me", a.updateMe)
+	secure.GET("/me/reward", a.personalReward)
+	secure.POST("/me/reward", a.startPersonalReward)
 	secure.GET("/habits", a.habits)
 	secure.GET("/habits/recovery-limits", a.habitRecoveryLimits)
 	secure.GET("/habits/week", a.habitWeek)

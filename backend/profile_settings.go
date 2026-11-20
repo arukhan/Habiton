@@ -78,7 +78,7 @@ func (a *App) updateHabit(c *gin.Context) {
 		return
 	}
 	var active bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM recovery_sessions WHERE habit_id=$1 AND user_id=$2 AND status IN ('offered','accepted','micro_completed','step_completed') AND expires_at>now())`, currentID, u.ID).Scan(&active)
+	err = tx.QueryRow(ctx, activeRecoveryQuery, currentID).Scan(&active)
 	if err != nil {
 		fail(c, 500, "Could not check active recovery")
 		return
