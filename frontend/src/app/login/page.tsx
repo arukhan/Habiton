@@ -1,12 +1,17 @@
 
 "use client";
 
+import { translateError } from "@/lib/translations";
+import { LanguageSelect, useLocale } from "@/context/LocaleContext";
+
 import Image from "next/image";
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useHabiton } from "@/context/AppContext";
 
 export default function Login() {
+  const { locale, t } = useLocale();
+
   const { login } = useHabiton();
 
   const [email, setEmail] = useState(
@@ -53,7 +58,7 @@ export default function Login() {
         <div className="auth-penguin">
           <Image
             src="/images/penguin-welcome.png"
-            alt="Habiton penguin waving hello"
+            alt={t("Habiton penguin waving hello")}
             width={380}
             height={310}
             className="login-penguin-image"
@@ -62,16 +67,16 @@ export default function Login() {
         </div>
 
         {/* Welcome */}
-        <h1>Your rhythm is here.</h1>
+        <h1>{t("Your rhythm is here.")}</h1>
 
         <p className="muted">
-          Welcome back. Your penguin missed you!
+          {t("Welcome back. Your penguin missed you!")}
         </p>
 
         {/* Login form */}
         <form className="form-stack" onSubmit={submit}>
           <label>
-            Email address
+            {t("Email address")}
             <input
               type="email"
               autoComplete="username"
@@ -82,7 +87,7 @@ export default function Login() {
           </label>
 
           <label>
-            Password
+            {t("Password")}
             <input
               type="password"
               autoComplete="current-password"
@@ -97,20 +102,22 @@ export default function Login() {
             className="btn-primary"
             disabled={busy}
           >
-            {busy ? "Signing in..." : "Log in"}
+            {busy ? t("Signing in...") : t("Log in")}
           </button>
         </form>
 
         {/* Registration */}
         <p className="switch-auth">
-          New to Habiton?{" "}
-          <Link href="/register">Create account</Link>
+          {t("New to Habiton?")}{" "}
+          <Link href="/register">{t("Create account")}</Link>
         </p>
+
+        <div className="form-stack"><LanguageSelect /></div>
 
         {/* Login errors */}
         {err && (
           <p className="error" role="alert">
-            {err}
+            {translateError(locale, err)}
           </p>
         )}
       </section>

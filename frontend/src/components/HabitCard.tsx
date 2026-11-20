@@ -1,6 +1,8 @@
 
 "use client";
 
+import { useLocale } from "@/context/LocaleContext";
+
 import type { Habit } from "@/types";
 import {
   BookOpen,
@@ -26,6 +28,8 @@ export function HabitCard({
   busy = false,
   readOnly = false,
 }: HabitCardProps) {
+  const { t } = useLocale();
+
   const category = habit.category.toLowerCase();
 
   const Icon = category.includes("health")
@@ -46,8 +50,8 @@ export function HabitCard({
         <strong className={habit.completed_today ? "habit-title-completed" : undefined}>{habit.title}</strong>
 
         <small>
-          {habit.target_minutes} min daily
-          {!readOnly && <> · 🔥 {habit.streak}-day streak</>}
+          {t("{count} min daily", { count: habit.target_minutes })}
+          {!readOnly && <> · 🔥 {t("{count}-day streak", { count: habit.streak })}</>}
         </small>
       </div>
 
@@ -55,8 +59,8 @@ export function HabitCard({
         <button
           type="button"
           className="icon-action"
-          aria-label={`Archive ${habit.title}`}
-          title="Archive habit"
+          aria-label={t("Archive {habit}", { habit: habit.title })}
+          title={t("Archive habit")}
           disabled={busy}
           onClick={onArchive}
         >
@@ -74,13 +78,13 @@ export function HabitCard({
         aria-pressed={habit.completed_today}
         aria-label={
           habit.completed_today
-            ? `Undo completion of ${habit.title}`
-            : `Complete ${habit.title}`
+            ? t("Undo completion of {habit}", { habit: habit.title })
+            : t("Complete {habit}", { habit: habit.title })
         }
-        title={readOnly ? "Past and future days are read-only" :
+        title={readOnly ? t("Past and future days are read-only") :
           habit.completed_today
-            ? "Undo completion"
-            : "Mark as completed"
+            ? t("Undo completion")
+            : t("Mark as completed")
         }
       >
         {habit.completed_today && <Check size={17} />}

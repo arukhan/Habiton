@@ -1,6 +1,10 @@
 
 "use client";
 
+import { niceDate } from "@/lib/dates";
+import { translateError } from "@/lib/translations";
+import { useLocale } from "@/context/LocaleContext";
+
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,6 +16,8 @@ import { API } from "@/lib/api";
 
 
 export default function Report() {
+  const { locale, t } = useLocale();
+
   const router = useRouter();
   const { habits, refresh } = useHabiton();
 
@@ -85,26 +91,25 @@ export default function Report() {
   return (
     <Shell navigation={false}>
       <Link href="/today" className="back-link">
-        ← Today
+        {t("← Today")}
       </Link>
 
-      <p className="eyebrow">RECOVERY · STEP 1</p>
+      <p className="eyebrow">{t("RECOVERY · STEP 1")}</p>
 
       {/* Header with penguin */}
       <div className="welcome-row">
         <div>
-          <h1>A miss is a moment.</h1>
+          <h1>{t("A miss is a moment.")}</h1>
 
           <p className="muted">
-            Tell us what got in the way.
-            Your earlier effort still matters.
+            {t("Tell us what got in the way. Your earlier effort still matters.")}
           </p>
         </div>
 
         <div className="recovery-penguin">
           <Image
             src="/images/penguin-sad.png"
-            alt="Habiton penguin resting under a rain cloud"
+            alt={t("Habiton penguin resting under a rain cloud")}
             width={150}
             height={150}
             className="recovery-penguin-image"
@@ -116,7 +121,7 @@ export default function Report() {
       {/* Recovery form */}
       <form className="form-stack" onSubmit={submit}>
         <label>
-          Which habit did you miss?
+          {t("Which habit did you miss?")}
 
           <select
             value={selected?.id || ""}
@@ -124,14 +129,14 @@ export default function Report() {
           >
             {habits.map((habit) => (
               <option key={habit.id} value={habit.id}>
-                {habit.title} — {habit.streak}-day streak
+                {habit.title} — {t("{count}-day streak", { count: habit.streak })}
               </option>
             ))}
           </select>
         </label>
 
         <label>
-          Missed date
+          {t("Missed date")}
 
           <select
             value={date}
@@ -140,20 +145,19 @@ export default function Report() {
             required
           >
             {availableDates.length === 0 && <option value="">
-              {datesLoading ? "Loading missed dates..." : "No available missed dates"}
+              {datesLoading ? t("Loading missed dates...") : t("No available missed dates")}
             </option>}
             {availableDates.map((day) => (
-              <option key={day} value={day}>{day}</option>
+              <option key={day} value={day}>{locale === "ru" ? niceDate(day, locale) : day}</option>
             ))}
           </select>
           <span className="missed-date-help">
-            Only past dates without a recorded completion are selectable.
-            Please confirm that you really missed the habit.
+            {t("Only past dates without a recorded completion are selectable. Please confirm that you really missed the habit.")}
           </span>
         </label>
 
         <p className="form-section-title">
-          What got in the way?
+          {t("What got in the way?")}
         </p>
 
         <div className="choice-grid">
@@ -171,7 +175,7 @@ export default function Report() {
               onClick={() => setReason(option.id)}
             >
               {reason === option.id ? "●" : "○"}{" "}
-              {option.name}
+              {t(option.name)}
             </button>
           ))}
         </div>
@@ -179,24 +183,24 @@ export default function Report() {
         {/* Today's capacity */}
         <div className="card soft-card">
           <p className="form-section-title">
-            Today's capacity
+            {t("Today's capacity")}
           </p>
 
           <label>
-            Workload
+            {t("Workload")}
 
             <select
               value={workload}
               onChange={(e) => setWorkload(e.target.value)}
             >
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
+              <option value="high">{t("High")}</option>
+              <option value="medium">{t("Medium")}</option>
+              <option value="low">{t("Low")}</option>
             </select>
           </label>
 
           <label>
-            Energy: {energy} / 5
+            {t("Energy: {count} / 5", { count: energy })}
 
             <input
               type="range"
@@ -211,8 +215,7 @@ export default function Report() {
         </div>
 
         <p className="gentle-message">
-          ⏰ Your 48-hour window begins when you submit
-          this report. A micro-quest appears immediately.
+          {t("⏰ Your 48-hour window begins when you submit this report. A micro-quest appears immediately.")}
         </p>
 
         <button
@@ -221,13 +224,13 @@ export default function Report() {
           disabled={busy || datesLoading || !selected || !date}
         >
           {busy
-            ? "Preparing your quest..."
-            : "Get my recovery quest"}
+            ? t("Preparing your quest...")
+            : t("Get my recovery quest")}
         </button>
 
         {error && (
           <p className="error" role="alert">
-            {error}
+            {translateError(locale, error)}
           </p>
         )}
       </form>
