@@ -1,10 +1,6 @@
 package main
 
-import (
-	"github.com/gin-gonic/gin"
-	"os"
-	"strings"
-)
+import "github.com/gin-gonic/gin"
 
 func (a *App) insights(c *gin.Context) {
 	u, _ := a.current(c)
@@ -115,52 +111,5 @@ func (a *App) insights(c *gin.Context) {
 		"best_streak": best, "history": items,
 		"daily_completion": daily, "perfect_days": perfectDays,
 		"achievements": gin.H{"first_step": full > 0, "three_days": threeDays, "comeback": recovery > 0},
-	})
-}
-
-func (a *App) adminMetrics(c *gin.Context) {
-	u, _ := a.current(c)
-	if strings.ToLower(u.Email) != strings.ToLower(os.Getenv("ADMIN_EMAIL")) || os.Getenv("ADMIN_EMAIL") == "" {
-		fail(c, 403, "Admin access only")
-		return
-	}
-	var users, habits, misses, recovered, eligible int
-	ctx := c.Request.Context()
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM users WHERE NOT is_demo`).Scan(&users)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM habits h JOIN users u ON h.user_id=u.id WHERE NOT u.is_demo`).Scan(&habits)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo`).Scan(&misses)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo AND r.streak_before>=3 AND r.reported_at<=now()-interval '48 hours'`).Scan(&eligible)
-	a.DB.QueryRow(ctx, `SELECT count(*) FROM recovery_sessions r JOIN users u ON r.user_id=u.id WHERE NOT u.is_demo AND r.streak_before>=3 AND r.reported_at<=now()-interval '48 hours' AND r.micro_completed_at IS NOT NULL AND r.micro_completed_at<=r.reported_at+interval '48 hours'`).Scan(&recovered)
-	var offered, accepted, completed, restored int
-	const recoveryFunnelSQL = `
-		SELECT COUNT(DISTINCT r.user_id) AS offered,
-			COUNT(DISTINCT r.user_id) FILTER (WHERE r.accepted_at IS NOT NULL) AS accepted,
-			COUNT(DISTINCT r.user_id) FILTER (WHERE r.micro_completed_at IS NOT NULL) AS completed,
-			COUNT(DISTINCT r.user_id) FILTER (WHERE r.original_completed_at IS NOT NULL) AS restored
-		FROM recovery_sessions r JOIN users u ON u.id=r.user_id
-		WHERE NOT u.is_demo AND r.reported_at >= now()-interval '30 days'
-	`
-	if err := a.DB.QueryRow(ctx, recoveryFunnelSQL).Scan(&offered, &accepted, &completed, &restored); err != nil {
-		fail(c, 500, "Could not load recovery funnel")
-		return
-	}
-	rate := 0.0
-	if eligible > 0 {
-		rate = 100 * float64(recovered) / float64(eligible)
-	}
-	rows, err := a.DB.Query(ctx, `SELECT name,count(*) FROM analytics_events WHERE NOT is_demo AND created_at>now()-interval '30 days' GROUP BY name ORDER BY count(*) DESC`)
-	events := []gin.H{}
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var name string
-			var n int
-			if rows.Scan(&name, &n) == nil {
-				events = append(events, gin.H{"name": name, "count": n})
-			}
-		}
-	}
-	c.JSON(200, gin.H{"real_users": users, "habits_created": habits, "missed_reports": misses, "eligible_matured": eligible, "recovered_within_48h": recovered, "recovery_rate_percent": rate, "events_last_30_days": events, "excluded_demo_accounts": true,
-		"recovery_funnel": gin.H{"offered": offered, "accepted": accepted, "completed": completed, "restored": restored},
 	})
 }

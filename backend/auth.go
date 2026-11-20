@@ -22,12 +22,14 @@ func (a *App) auth() gin.HandlerFunc {
 		token, err := c.Cookie("habiton_session")
 		if err != nil {
 			fail(c, 401, "Please log in")
+			c.Abort()
 			return
 		}
 		u := Identity{}
 		err = a.DB.QueryRow(c.Request.Context(), `SELECT u.id::text,u.name,u.email,u.hero_class,u.xp,u.is_demo FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()`, hash(token)).Scan(&u.ID, &u.Name, &u.Email, &u.Class, &u.XP, &u.Demo)
 		if err != nil {
 			fail(c, 401, "Session expired; log in again")
+			c.Abort()
 			return
 		}
 		c.Set("user", u)
@@ -52,7 +54,7 @@ func (a *App) setSession(c *gin.Context, u Identity) {
 }
 
 func publicUser(u Identity) gin.H {
-	return gin.H{"id": u.ID, "name": u.Name, "email": u.Email, "hero_class": u.Class, "xp": u.XP, "level": 1 + u.XP/100, "xp_in_level": u.XP % 100, "xp_next": 100, "is_demo": u.Demo}
+	return gin.H{"id": u.ID, "name": u.Name, "email": u.Email, "hero_class": u.Class, "xp": u.XP, "level": 1 + u.XP/100, "xp_in_level": u.XP % 100, "xp_next": 100, "is_demo": u.Demo, "is_admin": isAdmin(u)}
 }
 
 func (a *App) register(c *gin.Context) {
@@ -65,6 +67,10 @@ func (a *App) register(c *gin.Context) {
 	v.Email = strings.ToLower(strings.TrimSpace(v.Email))
 	if len(v.Name) < 2 || len(v.Name) > 70 || !strings.Contains(v.Email, "@") || len(v.Email) > 254 || len(v.Password) < 8 || len(v.Password) > 72 {
 		fail(c, 400, "Name, email and password (8–72 characters) required")
+		return
+	}
+	if adminEmail := configuredAdminEmail(); adminEmail != "" && v.Email == adminEmail {
+		fail(c, 409, "Email already exists")
 		return
 	}
 	password, err := bcrypt.GenerateFromPassword([]byte(v.Password), bcrypt.DefaultCost)

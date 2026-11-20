@@ -500,6 +500,53 @@ const russian: Readonly<Record<string, string>> = {
   "Original goal restored": "Исходная цель восстановлена",
   "Could not load recovery funnel":
     "Не удалось загрузить воронку восстановления",
+  "Admin dashboard": "Админ-панель",
+  "Only the configured administrator can view product metrics.":
+    "Продуктовые метрики доступны только администратору.",
+  "Product analytics": "Аналитика продукта",
+  "Demo accounts are excluded. Dates use the Asia/Almaty time zone.":
+    "Демо-аккаунты исключены. Даты указаны по времени Алматы.",
+  "Reporting period": "Период отчёта",
+  "Last 7 days": "Последние 7 дней",
+  "Last 30 days": "Последние 30 дней",
+  "Refresh metrics": "Обновить метрики",
+  "Loading metrics…": "Загружаем метрики…",
+  "Updated {date}": "Обновлено: {date}",
+  "Choose a 7-day or 30-day range": "Выберите период в 7 или 30 дней",
+  "Could not load admin metrics": "Не удалось загрузить метрики админ-панели",
+  Overview: "Обзор",
+  "Active in this period": "Активны за период",
+  "Active today": "Активны сегодня",
+  "New registrations": "Новые регистрации",
+  "D7 retention": "Удержание на 7-й день (D7)",
+  "{returned} of {eligible} accounts returned on day 7.":
+    "На 7-й день вернулись {returned} из {eligible} аккаунтов.",
+  "No completed day-7 measurement windows in this period.":
+    "В этом периоде пока нет завершённых окон измерения D7.",
+  "All-time totals": "За всё время",
+  "Recovery within 48 hours": "Восстановление за 48 часов",
+  "{recovered} of {eligible} eligible reports with closed windows.":
+    "{recovered} из {eligible} подходящих отчётов с закрытым окном.",
+  "No eligible reports with closed 48-hour windows in this period.":
+    "За этот период пока нет подходящих отчётов с закрытым 48-часовым окном.",
+  "Open 48-hour windows": "Открытые окна на 48 часов",
+  "Unique users with a plan offered in this period. Percentages are relative to all users offered a plan.":
+    "Уникальные пользователи, которым предложили план за период. Проценты рассчитаны от всех получивших предложение.",
+  "No recovery plans were offered in this period.":
+    "За этот период планы восстановления не предлагались.",
+  "Daily activity": "Активность по дням",
+  Date: "Дата",
+  "Active users": "Активные пользователи",
+  "Completion actions": "Отметки о выполнении",
+  "Recorded events": "Записанные события",
+  "No events recorded in this period.": "За этот период события не записаны.",
+  "How these metrics are counted": "Как считаются метрики",
+  "Activity means a recorded sign-in, registration, or habit or recovery action. Simply opening a page does not count.":
+    "Активность — зафиксированный вход, регистрация или действие с привычкой либо восстановлением. Открытие страницы само по себе не считается.",
+  "D7 includes accounts whose seventh calendar day fell in the selected period and has ended. A recorded action on that day counts as a return.":
+    "В D7 входят аккаунты, чей седьмой календарный день попал в выбранный период и уже завершился. Зафиксированное действие в этот день считается возвращением.",
+  "The 48-hour rate counts reports, so one person can contribute more than once. A micro-quest completed before the deadline counts as a recovery.":
+    "Показатель за 48 часов считается по отчётам, поэтому один человек может учитываться несколько раз. Восстановлением считается микроквест, завершённый до дедлайна.",
   "Untrusted request origin": "Запрос отклонён сервером",
   "Request failed ({status})": "Не удалось выполнить запрос (код {status})",
 };

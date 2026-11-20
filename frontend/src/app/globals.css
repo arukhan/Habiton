@@ -488,6 +488,76 @@ body {background:var(--outer-bg);color:var(--ink)}
   accent-color: var(--accent-strong);
 }
 
+.admin-dashboard .admin-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-period-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-period-buttons button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.admin-period-buttons button[aria-pressed="true"] {
+  background: var(--accent-strong);
+  color: white;
+}
+
+.admin-dashboard progress {
+  display: block;
+  width: 100%;
+  margin: 6px 0 2px;
+  accent-color: var(--accent-strong);
+}
+
+.admin-dashboard .admin-funnel-stage {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-dashboard .admin-funnel-stage:last-child {
+  border-bottom: 0;
+}
+
+.admin-dashboard .admin-table-wrapper {
+  overflow-x: auto;
+}
+
+.admin-dashboard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-dashboard th,
+.admin-dashboard td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-dashboard th:not(:first-child),
+.admin-dashboard td:not(:first-child) {
+  text-align: right;
+}
+
+.admin-dashboard summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .recovery-funnel-stages {
   list-style: none;
   margin: 0;

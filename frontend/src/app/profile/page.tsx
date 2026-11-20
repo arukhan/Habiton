@@ -4,6 +4,7 @@ import { dayCount, translateError } from "@/lib/translations";
 import { LanguageSelect, useLocale } from "@/context/LocaleContext";
 
 import Image from "next/image";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Pencil, Check, X, LogOut, Palette, ChevronDown, Moon, Sun } from "lucide-react";
 import { Shell } from "@/components/Shell";
@@ -91,6 +92,7 @@ export default function Profile() {
     <p className="eyebrow">{t("YOUR PENGUIN COMPANION")}</p>
     <h1>{t("A little more you.")}</h1>
     <div className="card form-stack"><LanguageSelect /></div>
+    {user?.is_admin && <Link className="btn-outline" href="/admin">{t("Admin dashboard")}</Link>}
     <div className="card profile-hero">
       <div className="profile-top">
         <div className="profile-penguin">
