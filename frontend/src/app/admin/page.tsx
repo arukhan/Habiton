@@ -8,7 +8,7 @@ import { useLocale } from "@/context/LocaleContext";
 import { API, ApiError } from "@/lib/api";
 import { niceDate } from "@/lib/dates";
 import { translateError } from "@/lib/translations";
-import type { AdminPeriod, Metrics } from "@/types";
+import type { AdminPeriod, LegacyMetrics, Metrics } from "@/types";
 
 const periods = [
   { days: 7, label: "Last 7 days" },
@@ -18,18 +18,20 @@ const periods = [
 export default function Admin() {
   const { locale, t } = useLocale();
   const { user } = useHabiton();
-  const isAdmin = user?.is_admin === true;
+  const canRequestMetrics = Boolean(user && user.is_admin !== false);
   const [days, setDays] = useState<AdminPeriod>(30);
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | LegacyMetrics | null>(null);
   const [error, setError] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canRequestMetrics) return;
     const controller = new AbortController();
     setBusy(true);
     setError("");
+    setAccessDenied(false);
     API.metrics(days, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) setMetrics(data);
@@ -41,6 +43,8 @@ export default function Admin() {
           (err.status === 401 || err.status === 403)
         ) {
           setMetrics(null);
+          setAccessDenied(true);
+          return;
         }
         setError(
           err instanceof Error ? err.message : "Could not load admin metrics",
@@ -50,9 +54,13 @@ export default function Admin() {
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [isAdmin, days, revision]);
+  }, [canRequestMetrics, days, revision]);
 
-  const current = metrics?.window_days === days ? metrics : null;
+  const current =
+    metrics && "window_days" in metrics && metrics.window_days === days
+      ? metrics
+      : null;
+  const legacy = metrics && !("window_days" in metrics) ? metrics : null;
   const number = new Intl.NumberFormat(locale);
   const percent = new Intl.NumberFormat(locale, {
     style: "percent",
@@ -72,7 +80,7 @@ export default function Admin() {
         </Link>
         <h1>{t("Product analytics")}</h1>
 
-        {!isAdmin ? (
+        {!canRequestMetrics || accessDenied ? (
           <section className="card">
             <h2>{t("Admin access only")}</h2>
             <p>
@@ -87,22 +95,24 @@ export default function Admin() {
               )}
             </p>
             <div className="admin-period-controls">
-              <div
-                className="admin-period-buttons"
-                role="group"
-                aria-label={t("Reporting period")}
-              >
-                {periods.map((period) => (
-                  <button
-                    key={period.days}
-                    type="button"
-                    aria-pressed={days === period.days}
-                    onClick={() => setDays(period.days)}
-                  >
-                    {t(period.label)}
-                  </button>
-                ))}
-              </div>
+              {user?.is_admin === true && !legacy && (
+                <div
+                  className="admin-period-buttons"
+                  role="group"
+                  aria-label={t("Reporting period")}
+                >
+                  {periods.map((period) => (
+                    <button
+                      key={period.days}
+                      type="button"
+                      aria-pressed={days === period.days}
+                      onClick={() => setDays(period.days)}
+                    >
+                      {t(period.label)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
                 className="profile-edit-button"
@@ -122,6 +132,59 @@ export default function Admin() {
               <p className="error" role="alert">
                 {translateError(locale, error)}
               </p>
+            )}
+            {legacy && (
+              <section className="card" aria-labelledby="legacy-admin-overview">
+                <h2 id="legacy-admin-overview">{t("Overview")}</h2>
+                <p className="muted">
+                  {t(
+                    "The detailed dashboard will be available after the backend update.",
+                  )}
+                </p>
+                {[
+                  {
+                    label: "Real users",
+                    value: number.format(legacy.real_users),
+                  },
+                  {
+                    label: "Created habits",
+                    value: number.format(legacy.habits_created),
+                  },
+                  {
+                    label: "Missed reports",
+                    value: number.format(legacy.missed_reports),
+                  },
+                  {
+                    label: "Eligible, 48h elapsed",
+                    value: number.format(legacy.eligible_matured),
+                  },
+                  {
+                    label: "Recovered within 48h",
+                    value: number.format(legacy.recovered_within_48h),
+                  },
+                  {
+                    label: "Recovery within 48 hours",
+                    value:
+                      legacy.eligible_matured > 0
+                        ? percent.format(legacy.recovery_rate_percent / 100)
+                        : "—",
+                  },
+                ].map(({ label, value }) => (
+                  <div className="event-line" key={label}>
+                    <span>{t(label)}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+                <details>
+                  <summary>{t("Events (last 30 days)")}</summary>
+                  {legacy.events_last_30_days.map(({ name, count }) => (
+                    <div className="event-line" key={name}>
+                      <span>{name}</span>
+                      <strong>{number.format(count)}</strong>
+                    </div>
+                  ))}
+                </details>
+              </section>
             )}
             {current && (
               <>

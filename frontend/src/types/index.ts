@@ -9,6 +9,15 @@ export type Achievements={first_step:boolean;three_days:boolean;comeback:boolean
 export type PersonalReward={reward:{title:string;progress:number}|null;goal:number};
 export type RecoveryFunnel={offered:number;accepted:number;completed:number;restored:number};
 export type AdminPeriod = 7 | 30;
+export type LegacyMetrics = {
+  real_users: number;
+  habits_created: number;
+  missed_reports: number;
+  eligible_matured: number;
+  recovered_within_48h: number;
+  recovery_rate_percent: number;
+  events_last_30_days: { name: string; count: number }[];
+};
 export type Metrics = {
   window_days: AdminPeriod;
   updated_at: string;

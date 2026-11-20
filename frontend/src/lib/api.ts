@@ -1,4 +1,4 @@
-import type {Habit,Recovery,User,Insights,Metrics,WeekDay,PersonalReward,AdminPeriod} from "@/types";
+import type {Habit,Recovery,User,Insights,Metrics,LegacyMetrics,WeekDay,PersonalReward,AdminPeriod} from "@/types";
 export class ApiError extends Error {constructor(public status:number,message:string){super(message);this.name="ApiError"}}
 export async function request<T>(path:string,options:RequestInit={}):Promise<T>{
  const result=await fetch(`/api${path}`,{credentials:"include",cache:"no-store",...options,headers:{...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
@@ -32,6 +32,6 @@ export const API={
  insights:()=>request<Insights>("/insights"),
  personalReward:()=>request<PersonalReward>("/me/reward"),
  startPersonalReward:(title:string)=>post<PersonalReward>("/me/reward",{title}),
- metrics:(days:AdminPeriod,signal?:AbortSignal)=>request<Metrics>(`/admin/metrics?days=${days}`,{signal}),
+ metrics:(days:AdminPeriod,signal?:AbortSignal)=>request<Metrics | LegacyMetrics>(`/admin/metrics?days=${days}`,{signal}),
  seed:()=>post<{ok:boolean}>("/demo/seed"),
 };

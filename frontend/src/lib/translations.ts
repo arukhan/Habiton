@@ -547,6 +547,8 @@ const russian: Readonly<Record<string, string>> = {
     "В D7 входят аккаунты, чей седьмой календарный день попал в выбранный период и уже завершился. Зафиксированное действие в этот день считается возвращением.",
   "The 48-hour rate counts reports, so one person can contribute more than once. A micro-quest completed before the deadline counts as a recovery.":
     "Показатель за 48 часов считается по отчётам, поэтому один человек может учитываться несколько раз. Восстановлением считается микроквест, завершённый до дедлайна.",
+  "The detailed dashboard will be available after the backend update.":
+    "Подробная панель появится после обновления бэкенда.",
   "Untrusted request origin": "Запрос отклонён сервером",
   "Request failed ({status})": "Не удалось выполнить запрос (код {status})",
 };

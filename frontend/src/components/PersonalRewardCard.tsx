@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocale } from "@/context/LocaleContext";
-import { API } from "@/lib/api";
+import { API, ApiError } from "@/lib/api";
 import { translateError } from "@/lib/translations";
 import type { PersonalReward } from "@/types";
 
@@ -12,6 +12,7 @@ export function PersonalRewardCard() {
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [supported, setSupported] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -20,10 +21,12 @@ export function PersonalRewardCard() {
         if (active) setData(result);
       })
       .catch((e: unknown) => {
-        if (active)
-          setError(
-            e instanceof Error ? e.message : "Could not load your reward",
-          );
+        if (!active) return;
+        if (e instanceof ApiError && e.status === 404) {
+          setSupported(false);
+          return;
+        }
+        setError(e instanceof Error ? e.message : "Could not load your reward");
       });
     return () => {
       active = false;
@@ -46,6 +49,8 @@ export function PersonalRewardCard() {
       setBusy(false);
     }
   }
+
+  if (!supported) return null;
 
   const reward = data?.reward;
   const ready = Boolean(data && reward && reward.progress >= data.goal);
