@@ -472,4 +472,22 @@ body {background:var(--outer-bg);color:var(--ink)}
 .theme-settings-note {font-size:10px;color:var(--muted);margin:12px 0 0}
 @media(max-width:370px){.theme-swatch-grid{gap:3px}.theme-swatch-dot{width:29px;height:29px}.theme-swatch{font-size:8px}}
 
+.hero-log-entries {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
 
+.hero-log-entries time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hero-log-entries h2 {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.hero-log-entries p:last-child {
+  margin-bottom: 0;
+}

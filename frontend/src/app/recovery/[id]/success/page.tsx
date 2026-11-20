@@ -87,6 +87,9 @@ export default function Success() {
           ? t("View progress")
           : t("Continue the step-up plan")}
       </Link>
+      <Link href="/hero-log" className="btn-outline">
+        {t("Open Hero’s Log")}
+      </Link>
       <Link href="/today" className="btn-outline">
         {t("Back to Today")}
       </Link>

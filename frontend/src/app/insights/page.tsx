@@ -5,6 +5,7 @@ import { dayCount, habitCount } from "@/lib/translations";
 import { useLocale } from "@/context/LocaleContext";
 
 import Image from "next/image";
+import Link from "next/link";
 
 import { useHabiton } from "@/context/AppContext";
 import { Shell } from "@/components/Shell";
@@ -51,6 +52,10 @@ export default function Insights() {
           />
         </div>
       </div>
+
+      <Link href="/hero-log" className="btn-outline">
+        {t("Open Hero’s Log")}
+      </Link>
 
       {/* Personal summary */}
       <div className="card">
