@@ -19,6 +19,8 @@ type App struct {
 	DB           *pgxpool.Pool
 	Client       *http.Client
 	AmplitudeKey string
+	EmailAuth    *emailAuth
+	GoogleAuth   *googleAuth
 }
 type Identity struct {
 	ID, Name, Email, Class string

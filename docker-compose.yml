@@ -17,10 +17,21 @@ services:
     environment:
       DATABASE_URL: postgres://habiton:${POSTGRES_PASSWORD:-habiton_local_only}@db:5432/habiton?sslmode=disable
       PORT: "8080"
-      COOKIE_SECURE: "false"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DEMO_MODE: ${DEMO_MODE:-false}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       AMPLITUDE_API_KEY: ${AMPLITUDE_API_KEY:-}
+      SMTP_REQUIRED: ${SMTP_REQUIRED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_CODE_SECRET: ${EMAIL_CODE_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
     depends_on:
       db:

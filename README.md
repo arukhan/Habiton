@@ -75,3 +75,25 @@ The frontend uses `BACKEND_URL` when building the API rewrite. Set it to the dep
 GitHub Actions runs ESLint, the Next.js build, and Go tests with PostgreSQL. To run the integration test locally, set `HABITON_TEST_DATABASE_URL` to a test PostgreSQL database where the role can create schemas, then run `go test -mod=readonly -count=1 ./...` in `backend/`. The test creates and drops its own schema.
 
 In the admin dashboard, G1 tracks timely micro-quest completions whose seven-day measurement windows closed in the selected period. It reports the share that returned to the original goal within seven days of reporting the missed habit.
+
+## Email and Google sign-in
+
+Configure these variables on the **Go API host**. Keep credentials in the hosting provider's secret settings. Next.js continues to use `BACKEND_URL` to proxy `/api`.
+
+| Setting | Value |
+| --- | --- |
+| `SMTP_REQUIRED` | Set to `true` in production once the settings below are available. The API then stops at startup if email configuration is missing. |
+| `SMTP_HOST`, `SMTP_PORT` | Your SMTP provider's hostname and port. Use `587` with STARTTLS or `465` with implicit TLS, according to the provider. |
+| `SMTP_TLS_MODE` | `starttls` (default) or `implicit`. |
+| `SMTP_FROM` | Sender address verified by the provider. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP credentials from the provider, if required. |
+| `EMAIL_CODE_SECRET` | Stable secret of at least 32 bytes shared by all API instances. Generate it with `openssl rand -hex 32`. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth client of type **Web application**. |
+| `GOOGLE_REDIRECT_URL` | Set this to `https://myhabiton.vercel.app/api/auth/google/callback` and add the same URL to the Google client's authorized redirect URIs. For local HTTP use `http://localhost:3000/api/auth/google/callback`. |
+| `APP_ORIGIN`, `COOKIE_SECURE` | In production use the deployed frontend origin and set `COOKIE_SECURE=true`. |
+
+Without SMTP configuration, the local development workflow uses password-only registration and password login. With SMTP enabled, new accounts verify their address before creation. Existing accounts verify via the password reset flow, which keeps the user ID, habits and progress and revokes prior sessions. The passwordless login option is available for verified non-demo accounts. Finish provider testing before enabling this policy on a live database.
+
+Google sign-in uses Gmail or a verified Google Workspace address. It creates a profile on the first sign-in and uses the Google subject on subsequent sign-ins. Existing accounts keep their existing sign-in methods, including when a Google profile presents the same email. Google test-mode users must be added to the OAuth consent screen's test-user list.
+
+The Go test suite uses a disposable PostgreSQL schema and simulated delivery and Google responses. After setting up production providers, confirm that a message arrives, verify a test registration, and complete one Google sign-in using the deployed frontend.

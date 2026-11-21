@@ -14,13 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestRecoveryPostgres(t *testing.T) {
+func integrationDB(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
 	dsn := os.Getenv("HABITON_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("set HABITON_TEST_DATABASE_URL to run the PostgreSQL integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -30,24 +31,43 @@ func TestRecoveryPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer admin.Close()
+	t.Cleanup(admin.Close)
 	schema := "habiton_test_" + strings.ReplaceAll(newID(), "-", "")
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := admin.Exec(cleanup, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
 			t.Error(err)
 		}
-	}()
+	})
 	config.ConnConfig.RuntimeParams["search_path"] = schema
 	db, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(db.Close)
+
+	migrations, err := migrationFS.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range migrations {
+		sql, err := migrationFS.ReadFile("migrations/" + file.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(ctx, string(sql)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return ctx, db
+}
+
+func TestRecoveryPostgres(t *testing.T) {
+	ctx, db := integrationDB(t)
 
 	exec := func(query string, args ...any) {
 		t.Helper()
@@ -55,11 +75,6 @@ func TestRecoveryPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	schemaSQL, err := migrationFS.ReadFile("migrations/001_init.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	exec(string(schemaSQL))
 
 	user := Identity{ID: newID()}
 	exec("INSERT INTO users (id,name,email,password_hash,xp) VALUES ($1,'Student','test@example.test','unused',100)", user.ID)
@@ -99,7 +114,7 @@ func TestRecoveryPostgres(t *testing.T) {
 	call(http.MethodPost, "/recoveries/"+expiredPlan+"/micro", `{"confirmed":true}`, 409)
 	var status string
 	var streak, best int
-	err = db.QueryRow(ctx, `SELECT r.status,h.streak_count,h.best_streak FROM recovery_sessions r JOIN habits h
+	err := db.QueryRow(ctx, `SELECT r.status,h.streak_count,h.best_streak FROM recovery_sessions r JOIN habits h
 		ON h.id=r.habit_id WHERE r.id=$1`, expiredPlan).Scan(&status, &streak, &best)
 	if err != nil || status != "expired" || streak != 0 || best != 12 {
 		t.Fatalf("expired recovery: status=%q streak=%d best=%d err=%v", status, streak, best, err)

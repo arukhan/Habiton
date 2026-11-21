@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -26,7 +27,7 @@ func (a *App) auth() gin.HandlerFunc {
 			return
 		}
 		u := Identity{}
-		err = a.DB.QueryRow(c.Request.Context(), `SELECT u.id::text,u.name,u.email,u.hero_class,u.xp,u.is_demo FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()`, hash(token)).Scan(&u.ID, &u.Name, &u.Email, &u.Class, &u.XP, &u.Demo)
+		err = a.DB.QueryRow(c.Request.Context(), `SELECT u.id::text,u.name,u.email,u.hero_class,u.xp,u.is_demo FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND (NOT $2 OR u.email_verified_at IS NOT NULL OR ($3 AND u.is_demo))`, hash(token), a.EmailAuth != nil, env("DEMO_MODE", "false") == "true").Scan(&u.ID, &u.Name, &u.Email, &u.Class, &u.XP, &u.Demo)
 		if err != nil {
 			fail(c, 401, "Session expired; log in again")
 			c.Abort()
@@ -42,15 +43,30 @@ func sessionCookie(c *gin.Context, token string, seconds int) {
 	http.SetCookie(c.Writer, &http.Cookie{Name: "habiton_session", Value: token, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: seconds})
 }
 
-func (a *App) setSession(c *gin.Context, u Identity) {
+func (a *App) createSession(c *gin.Context, u Identity) error {
 	token := newToken()
-	_, err := a.DB.Exec(c.Request.Context(), `INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '14 days')`, hash(token), u.ID)
+	_, err := a.DB.Exec(c.Request.Context(), sessionInsert, hash(token), u.ID)
 	if err != nil {
-		fail(c, 500, "Could not create session")
-		return
+		return err
 	}
 	sessionCookie(c, token, 14*86400)
-	c.JSON(200, gin.H{"user": publicUser(u)})
+	return nil
+}
+
+const sessionInsert = `INSERT INTO sessions(token_hash,user_id,expires_at)
+	VALUES($1,$2,now()+interval '14 days')`
+
+func commitSession(c *gin.Context, tx pgx.Tx, u Identity) error {
+	ctx := c.Request.Context()
+	token := newToken()
+	if _, err := tx.Exec(ctx, sessionInsert, hash(token), u.ID); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	sessionCookie(c, token, 14*86400)
+	return nil
 }
 
 func publicUser(u Identity) gin.H {
@@ -58,19 +74,29 @@ func publicUser(u Identity) gin.H {
 }
 
 func (a *App) register(c *gin.Context) {
-	var v struct{ Name, Email, Password string }
+	var v struct{ Name, Email, Password, Code string }
 	if c.ShouldBindJSON(&v) != nil {
 		fail(c, 400, "Invalid details")
 		return
 	}
 	v.Name = strings.TrimSpace(v.Name)
 	v.Email = strings.ToLower(strings.TrimSpace(v.Email))
-	if len(v.Name) < 2 || len(v.Name) > 70 || !strings.Contains(v.Email, "@") || len(v.Email) > 254 || len(v.Password) < 8 || len(v.Password) > 72 {
+	if len(v.Name) < 2 || len(v.Name) > 70 || !validEmail(v.Email) || len(v.Password) < 8 || len(v.Password) > 72 {
 		fail(c, 400, "Name, email and password (8–72 characters) required")
 		return
 	}
 	if adminEmail := configuredAdminEmail(); adminEmail != "" && v.Email == adminEmail {
 		fail(c, 409, "Email already exists")
+		return
+	}
+	ctx := c.Request.Context()
+	tx, err := a.DB.Begin(ctx)
+	if err != nil {
+		fail(c, 500, "Could not create account")
+		return
+	}
+	defer tx.Rollback(ctx)
+	if a.EmailAuth != nil && !a.checkEmailCode(c, tx, v.Email, "signup", v.Code) {
 		return
 	}
 	password, err := bcrypt.GenerateFromPassword([]byte(v.Password), bcrypt.DefaultCost)
@@ -79,13 +105,23 @@ func (a *App) register(c *gin.Context) {
 		return
 	}
 	u := Identity{ID: newID(), Name: v.Name, Email: v.Email, Class: "Mage"}
-	_, err = a.DB.Exec(c.Request.Context(), `INSERT INTO users(id,name,email,password_hash) VALUES($1,$2,$3,$4)`, u.ID, u.Name, u.Email, string(password))
+	result, err := tx.Exec(ctx, `INSERT INTO users(id,name,email,password_hash,email_verified_at)
+		VALUES($1,$2,$3,$4,CASE WHEN $5 THEN now() END) ON CONFLICT (email) DO NOTHING`,
+		u.ID, u.Name, u.Email, string(password), a.EmailAuth != nil)
 	if err != nil {
+		fail(c, 500, "Could not create account")
+		return
+	}
+	if result.RowsAffected() == 0 {
 		fail(c, 409, "Email already exists")
 		return
 	}
-	a.event(c.Request.Context(), u, "sign_up_completed", nil)
-	a.setSession(c, u)
+	if err := commitSession(c, tx, u); err != nil {
+		fail(c, 500, "Could not create session")
+		return
+	}
+	a.event(ctx, u, "sign_up_completed", nil)
+	c.JSON(200, gin.H{"user": publicUser(u)})
 }
 
 func (a *App) login(c *gin.Context) {
@@ -94,15 +130,31 @@ func (a *App) login(c *gin.Context) {
 		fail(c, 400, "Invalid login")
 		return
 	}
+	ctx := c.Request.Context()
+	tx, err := a.DB.Begin(ctx)
+	if err != nil {
+		fail(c, 503, "Database unavailable")
+		return
+	}
+	defer tx.Rollback(ctx)
 	u := Identity{}
 	var password string
-	err := a.DB.QueryRow(c.Request.Context(), `SELECT id::text,name,email,hero_class,xp,is_demo,password_hash FROM users WHERE email=$1`, strings.ToLower(strings.TrimSpace(v.Email))).Scan(&u.ID, &u.Name, &u.Email, &u.Class, &u.XP, &u.Demo, &password)
+	var verified bool
+	err = tx.QueryRow(ctx, `SELECT id::text,name,email,hero_class,xp,is_demo,password_hash,email_verified_at IS NOT NULL FROM users WHERE email=$1 FOR SHARE`, strings.ToLower(strings.TrimSpace(v.Email))).Scan(&u.ID, &u.Name, &u.Email, &u.Class, &u.XP, &u.Demo, &password, &verified)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(password), []byte(v.Password)) != nil {
 		fail(c, 401, "Invalid email or password")
 		return
 	}
-	a.event(c.Request.Context(), u, "login_completed", nil)
-	a.setSession(c, u)
+	if a.EmailAuth != nil && !verified && !(u.Demo && env("DEMO_MODE", "false") == "true") {
+		c.JSON(403, gin.H{"error": "Verify your email by resetting your password.", "code": "email_unverified"})
+		return
+	}
+	if err := commitSession(c, tx, u); err != nil {
+		fail(c, 500, "Could not create session")
+		return
+	}
+	a.event(ctx, u, "login_completed", nil)
+	c.JSON(200, gin.H{"user": publicUser(u)})
 }
 
 func (a *App) logout(c *gin.Context) {

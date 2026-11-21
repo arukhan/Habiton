@@ -43,26 +43,31 @@ func main() {
 	if err = db.Ping(ctx); err != nil {
 		log.Fatalf("Database unavailable: %v", err)
 	}
-	sql, err := migrationFS.ReadFile("migrations/001_init.sql")
+	migrations, err := migrationFS.ReadDir("migrations")
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, statement := range strings.Split(string(sql), ";") {
-		if strings.TrimSpace(statement) == "" {
-			continue
+	for _, migration := range migrations {
+		sql, err := migrationFS.ReadFile("migrations/" + migration.Name())
+		if err != nil {
+			log.Fatal(err)
 		}
-		if _, err = db.Exec(context.Background(), statement); err != nil {
-			log.Fatalf("Schema init failed: %v", err)
+		if _, err := db.Exec(context.Background(), string(sql)); err != nil {
+			log.Fatalf("Schema init failed (%s): %v", migration.Name(), err)
 		}
 	}
-	a := &App{DB: db, Client: &http.Client{Timeout: 5 * time.Second}, AmplitudeKey: os.Getenv("AMPLITUDE_API_KEY")}
+	a := &App{DB: db, Client: &http.Client{Timeout: 8 * time.Second}, AmplitudeKey: os.Getenv("AMPLITUDE_API_KEY")}
+	if err := a.configureAuth(); err != nil {
+		log.Fatal(err)
+	}
 	if env("DEMO_MODE", "false") == "true" {
 		if err = a.seedDemoAccounts(context.Background()); err != nil {
 			log.Fatalf("Demo seed failed: %v", err)
 		}
 	}
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/api/auth/google/callback"}}), gin.Recovery())
 
 	r.Use(func(c *gin.Context) {
 		method := c.Request.Method
@@ -97,6 +102,10 @@ func main() {
 			}
 		}
 
+		if method == http.MethodPost && strings.HasPrefix(c.Request.URL.Path, "/api/auth/") {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8192)
+		}
+
 		c.Next()
 	})
 
@@ -107,6 +116,12 @@ func main() {
 	})
 	r.POST("/api/auth/register", a.register)
 	r.POST("/api/auth/login", a.login)
+	r.GET("/api/auth/options", a.authOptions)
+	r.POST("/api/auth/email/request", a.requestEmailCode)
+	r.POST("/api/auth/email/login", a.loginWithEmailCode)
+	r.POST("/api/auth/email/reset", a.resetPassword)
+	r.GET("/api/auth/google", a.startGoogleLogin)
+	r.GET("/api/auth/google/callback", a.finishGoogleLogin)
 	secure := r.Group("/api")
 	secure.Use(a.auth())
 	secure.POST("/auth/logout", a.logout)

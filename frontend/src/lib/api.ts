@@ -1,16 +1,20 @@
 import type {Habit,Recovery,User,Insights,Metrics,LegacyMetrics,WeekDay,PersonalReward,AdminPeriod} from "@/types";
-export class ApiError extends Error {constructor(public status:number,message:string){super(message);this.name="ApiError"}}
+export class ApiError extends Error {constructor(public status:number,message:string,public code?:string){super(message);this.name="ApiError"}}
 export async function request<T>(path:string,options:RequestInit={}):Promise<T>{
  const result=await fetch(`/api${path}`,{credentials:"include",cache:"no-store",...options,headers:{...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
  const data=await result.json().catch(()=>({}));
- if(!result.ok)throw new ApiError(result.status,typeof data.error==="string"?data.error:`Request failed (${result.status})`);
+ if(!result.ok)throw new ApiError(result.status,typeof data.error==="string"?data.error:`Request failed (${result.status})`,typeof data.code==="string"?data.code:undefined);
  return data as T;
 }
 const post=<T,>(path:string,body:object={})=>request<T>(path,{method:"POST",body:JSON.stringify(body)});
 export const API={
  me:()=>request<{user:User}>("/me"),
  login:(email:string,password:string)=>post<{user:User}>("/auth/login",{email,password}),
- register:(name:string,email:string,password:string)=>post<{user:User}>("/auth/register",{name,email,password}),
+ register:(name:string,email:string,password:string,code?:string)=>post<{user:User}>("/auth/register",{name,email,password,code}),
+ authOptions:()=>request<{email_codes:boolean;google:boolean}>("/auth/options"),
+ requestEmailCode:(email:string,purpose:"signup"|"login"|"reset")=>post<{ok:boolean}>("/auth/email/request",{email,purpose}),
+ loginWithCode:(email:string,code:string)=>post<{user:User}>("/auth/email/login",{email,code}),
+ resetPassword:(email:string,code:string,password:string)=>post<{ok:boolean}>("/auth/email/reset",{email,code,password}),
  logout:()=>post<{ok:boolean}>("/auth/logout"),
  updateProfile:(body:{name?:string;hero_class?:string})=>request<{user:User}>("/me",{method:"PATCH",body:JSON.stringify(body),headers:{"Content-Type":"application/json"}}),
  habits:()=>request<{habits:Habit[]}>("/habits"),

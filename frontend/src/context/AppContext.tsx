@@ -16,7 +16,8 @@ type Store = {
   refresh: () => Promise<void>;
   setError: (message: string) => void;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  loginWithCode: (email: string, code: string) => Promise<void>;
+  register: (name: string, email: string, password: string, code?: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (body: { name?: string; hero_class?: string }) => Promise<void>;
 };
@@ -87,9 +88,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     router.push("/today");
   }
 
-  async function register(name: string, email: string, password: string) {
+  async function loginWithCode(email: string, code: string) {
     setError("");
-    const result = await API.register(name, email, password);
+    const result = await API.loginWithCode(email, code);
+    setUser(result.user);
+    await refresh();
+    router.push("/today");
+  }
+
+  async function register(name: string, email: string, password: string, code?: string) {
+    setError("");
+    const result = await API.register(name, email, password, code);
     setUser(result.user);
     await refresh();
     router.push("/habits/new");
@@ -114,7 +123,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <Context.Provider value={{
       user, habits, recoveries, insights, insightsError, loading, error,
-      refresh, setError, login, register, logout, updateProfile,
+      refresh, setError, login, loginWithCode, register, logout, updateProfile,
     }}>
       {children}
     </Context.Provider>

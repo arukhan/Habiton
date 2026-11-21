@@ -5,10 +5,31 @@ import { LanguageSelect, useLocale } from "@/context/LocaleContext";
 import { useState } from "react";
 import Link from "next/link";
 import { Penguin } from "@/components/Penguin";
+import { API } from "@/lib/api";
+import { EmailCode, useAuthOptions } from "@/components/EmailCode";
 import { useHabiton } from "@/context/AppContext";
 export default function Register() {
   const { locale, t } = useLocale();
   const { register } = useHabiton();
+  const options = useAuthOptions();
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  async function sendCode() {
+    await API.requestEmailCode(email, "signup");
+    setCode("");
+    setSent(true);
+  }
+  async function resend() {
+    setBusy(true);
+    setError("");
+    try {
+      await sendCode();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not request a code.");
+    } finally {
+      setBusy(false);
+    }
+  }
   const [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -19,7 +40,8 @@ export default function Register() {
     setBusy(true);
     setError("");
     try {
-      await register(name, email, password);
+      if (options.email_codes && !sent) await sendCode();
+      else await register(name, email, password, sent ? code : undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not register");
     } finally {
@@ -52,7 +74,7 @@ export default function Register() {
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setSent(false); setCode(""); }}
               required
             />
           </label>
@@ -67,10 +89,12 @@ export default function Register() {
               minLength={8}
             />
           </label>
-          <button className="btn-primary" disabled={busy}>
-            {t("Create your account")}
+          {sent && <EmailCode value={code} onChange={setCode} onResend={resend} busy={busy} />}
+          <button className="btn-primary" disabled={busy || options.loading}>
+            {t(options.email_codes && !sent ? "Send email code" : "Create your account")}
           </button>
         </form>
+        {options.google && <a className="btn-outline" href="/api/auth/google">{t("Continue with Google")}</a>}
         <p className="switch-auth">
           {t("Already have an account?")}{" "}
           <Link href="/login">{t("Log in")}</Link>
