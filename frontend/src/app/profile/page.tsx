@@ -91,7 +91,6 @@ export default function Profile() {
   return <Shell>
     <p className="eyebrow">{t("YOUR PENGUIN COMPANION")}</p>
     <h1>{t("A little more you.")}</h1>
-    <div className="card form-stack"><LanguageSelect /></div>
     {user?.is_admin && <Link className="btn-outline" href="/admin">{t("Admin dashboard")}</Link>}
     <div className="card profile-hero">
       <div className="profile-top">
@@ -197,6 +196,9 @@ export default function Profile() {
         </div>
         <p className="theme-settings-note">{t("Saved automatically on this device. The same colors apply to Today, Recovery, Insights and Profile.")}</p>
       </div>}
+      <div className="form-stack profile-language-setting">
+        <LanguageSelect />
+      </div>
     </section>
 
     {notice&&<p className="profile-notice" role="status">{t(notice)}</p>}

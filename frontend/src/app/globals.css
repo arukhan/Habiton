@@ -458,6 +458,8 @@ body {background:var(--outer-bg);color:var(--ink)}
 :root[data-habiton-mode="dark"] .profile-penguin {background:var(--surface-muted);border-color:var(--line)}
 /* Settings panel */
 .theme-settings-card {margin-top:14px}
+.profile-language-setting {margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.profile-language-setting label {display:grid;grid-template-columns:1fr minmax(0, 9rem);align-items:center;gap:12px}
 .theme-settings-trigger {display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:var(--surface-muted);color:var(--dark);border:1px solid var(--line);border-radius:12px;font-size:13px;font-weight:750;text-align:left}
 .theme-settings-trigger span {flex:1}
 .theme-settings-panel {padding-top:14px}
