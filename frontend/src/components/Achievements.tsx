@@ -32,7 +32,7 @@ export function Achievements({ progress }: { progress: AchievementProgress }) {
     <section className="card" aria-labelledby="achievements-heading">
       <h2 id="achievements-heading">{t("Hero achievements")}</h2>
       {badges.map(({ id, title, description, Icon }) => (
-        <div key={id} className="profile-habit-row">
+        <div key={id} className="profile-habit-row achievement-row">
           <Icon size={18} aria-hidden="true" />
           <div>
             <strong>{t(title)}</strong>
