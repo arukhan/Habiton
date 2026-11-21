@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -15,6 +16,20 @@ import (
 
 //go:embed migrations/*.sql
 var migrationFS embed.FS
+
+func buildVersion() string {
+	if version := os.Getenv("APP_VERSION"); version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				return setting.Value
+			}
+		}
+	}
+	return "unknown"
+}
 
 func main() {
 	dsn := env("DATABASE_URL", "postgres://habiton:habiton_local_only@localhost:5432/habiton?sslmode=disable")
@@ -85,7 +100,11 @@ func main() {
 		c.Next()
 	})
 
-	r.GET("/api/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok", "service": "habiton-backend"}) })
+	version := buildVersion()
+	r.GET("/api/health", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, gin.H{"status": "ok", "service": "habiton-backend", "version": version})
+	})
 	r.POST("/api/auth/register", a.register)
 	r.POST("/api/auth/login", a.login)
 	secure := r.Group("/api")

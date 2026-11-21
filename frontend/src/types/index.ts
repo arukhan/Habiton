@@ -31,6 +31,7 @@ export type Metrics = {
   recovered_within_48h: number;
   recovery_rate_percent: number;
   retention_7d: { eligible: number; returned: number };
+  return_to_goal_7d?: { eligible: number; returned: number };
   recovery_funnel: RecoveryFunnel;
   daily_activity: { date: string; active_users: number; completion_actions: number }[];
   event_counts: { name: string; count: number }[];

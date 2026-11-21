@@ -8,6 +8,10 @@ import (
 
 func (a *App) habits(c *gin.Context) {
 	u, _ := a.current(c)
+	if err := a.reconcileExpiredRecoveries(c.Request.Context(), u.ID); err != nil {
+		fail(c, 500, "Could not update expired recoveries")
+		return
+	}
 	rows, err := a.DB.Query(c.Request.Context(), `SELECT h.id::text,h.title,h.category,h.target_minutes,h.streak_count,h.best_streak, h.consecutive_recoveries, EXISTS(SELECT 1 FROM habit_logs l WHERE l.habit_id=h.id AND l.log_date=$2::date AND l.kind='full') FROM habits h WHERE h.user_id=$1 AND NOT h.archived ORDER BY h.created_at DESC`, u.ID, localDate())
 	if err != nil {
 		fail(c, 500, "Database error")
@@ -70,6 +74,10 @@ func (a *App) deleteHabit(c *gin.Context) {
 
 func (a *App) completeHabit(c *gin.Context) {
 	u, _ := a.current(c)
+	if err := a.reconcileExpiredRecoveries(c.Request.Context(), u.ID); err != nil {
+		fail(c, 500, "Could not update expired recoveries")
+		return
+	}
 	ctx := c.Request.Context()
 	tx, err := a.DB.Begin(ctx)
 	if err != nil {

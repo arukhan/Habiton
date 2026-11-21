@@ -1,7 +1,7 @@
 
 "use client";
 
-import { dayCount, habitCount } from "@/lib/translations";
+import { dayCount, habitCount, translateError } from "@/lib/translations";
 import { useLocale } from "@/context/LocaleContext";
 
 import Image from "next/image";
@@ -14,7 +14,19 @@ import { niceDate } from "@/lib/dates";
 export default function Insights() {
   const { locale, t } = useLocale();
 
-  const { insights, habits } = useHabiton();
+  const { insights, habits, insightsError } = useHabiton();
+
+  if (!insights) {
+    return (
+      <Shell>
+        {insightsError ? (
+          <p role="alert">{translateError(locale, insightsError)}</p>
+        ) : (
+          <p role="status">{t("Loading insights…")}</p>
+        )}
+      </Shell>
+    );
+  }
 
   const history = insights?.history || [];
   const bestStreak = insights?.best_streak ?? 0;
@@ -28,6 +40,7 @@ export default function Insights() {
 
   return (
     <Shell>
+      {insightsError && <p role="alert">{translateError(locale, insightsError)}</p>}
       {/* Page header */}
       <p className="eyebrow">{t("YOUR REAL PROGRESS")}</p>
 

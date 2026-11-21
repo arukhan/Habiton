@@ -65,3 +65,13 @@ The dashboard shows aggregated 7- and 30-day reports using the Asia/Almaty calen
 ## Local development without Docker
 
 Run PostgreSQL separately and set `DATABASE_URL`. Within `backend/`: `go mod tidy`, `go run .` (Go 1.25). Within `frontend/`: `npm install`, set `BACKEND_URL=http://localhost:8080` in `.env.local`, `npm run dev`. Do not commit secret environment files.
+
+## Release verification
+
+Compare the production deployment's Source Commit in Vercel with the frontend response at `/version`. Vercel supplies `VERCEL_GIT_COMMIT_SHA` when system environment variables are exposed to the build. For other frontend builds, set `APP_VERSION` to the commit SHA at build time. The backend's `/api/health` returns its Go build revision when available. Set `APP_VERSION` on the API host to the SHA of that artifact when VCS build information is unavailable, as with a Docker build context that omits Git metadata.
+
+The frontend uses `BACKEND_URL` when building the API rewrite. Set it to the deployed Go API in the Vercel Production environment and rebuild after changing it. Deploy Go changes separately, then verify health and the recovery flow.
+
+GitHub Actions runs ESLint, the Next.js build, and Go tests with PostgreSQL. To run the integration test locally, set `HABITON_TEST_DATABASE_URL` to a test PostgreSQL database where the role can create schemas, then run `go test -mod=readonly -count=1 ./...` in `backend/`. The test creates and drops its own schema.
+
+In the admin dashboard, G1 tracks timely micro-quest completions whose seven-day measurement windows closed in the selected period. It reports the share that returned to the original goal within seven days of reporting the missed habit.

@@ -80,6 +80,16 @@ const adminRecoverySQL = adminWindowSQL + `
 	WHERE NOT u.is_demo AND r.reported_at >= b.starts_at AND r.reported_at <= b.as_of
 `
 
+const adminReturnToGoalSQL = adminWindowSQL + `
+	SELECT count(*) AS eligible,
+		count(*) FILTER (WHERE r.original_completed_at >= r.micro_completed_at
+			AND r.original_completed_at <= r.reported_at + interval '168 hours') AS returned
+	FROM recovery_sessions r JOIN users u ON u.id=r.user_id CROSS JOIN bounds b
+	WHERE NOT u.is_demo AND r.streak_before >= 3
+		AND r.reported_at + interval '168 hours' BETWEEN b.starts_at AND b.as_of
+		AND r.micro_completed_at >= r.reported_at AND r.micro_completed_at < r.expires_at
+`
+
 const adminDailySQL = adminActivitySQL + `
 	SELECT d.day::date::text AS day, count(DISTINCT a.user_id) AS active_users,
 		count(*) FILTER (WHERE a.name IN ('habit_completed','full_difficulty_restored')) AS completions
@@ -136,6 +146,12 @@ func (a *App) adminMetrics(c *gin.Context) {
 		return
 	}
 
+	var returnEligible, returnedToGoal int
+	if err := a.DB.QueryRow(ctx, adminReturnToGoalSQL, now, days).Scan(&returnEligible, &returnedToGoal); err != nil {
+		fail(c, 500, "Could not load admin metrics")
+		return
+	}
+
 	daily := make([]gin.H, 0, days)
 	dailyRows, err := a.DB.Query(ctx, adminDailySQL, now, days)
 	if err != nil {
@@ -188,7 +204,8 @@ func (a *App) adminMetrics(c *gin.Context) {
 		"signups": signups, "active_users": active, "daily_activity": daily,
 		"eligible_matured": matured, "pending_48h": pending, "recovered_within_48h": recovered,
 		"recovery_rate_percent": rate, "retention_7d": gin.H{"eligible": retentionEligible, "returned": returned},
-		"recovery_funnel": gin.H{"offered": offered, "accepted": accepted, "completed": completed, "restored": restored},
-		"event_counts":    events, "events_last_30_days": events,
+		"return_to_goal_7d": gin.H{"eligible": returnEligible, "returned": returnedToGoal},
+		"recovery_funnel":   gin.H{"offered": offered, "accepted": accepted, "completed": completed, "restored": restored},
+		"event_counts":      events, "events_last_30_days": events,
 	})
 }

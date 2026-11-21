@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 // The deadline applies until the micro-quest is complete. Later stages stay active.
@@ -15,11 +17,62 @@ const activeRecoveryQuery = `
 	SELECT EXISTS (
 		SELECT 1 FROM recovery_sessions
 		WHERE habit_id=$1 AND (
-			(status IN ('offered','accepted') AND expires_at>clock_timestamp())
-			OR status IN ('micro_completed','step_completed')
+			status IN ('offered','accepted','micro_completed','step_completed')
 		)
 	)
 `
+
+const expireRecoveriesSQL = `
+	WITH expired AS (
+		UPDATE recovery_sessions SET status='expired'
+		WHERE habit_id IN (SELECT unnest($1::text[])::uuid)
+			AND status IN ('offered','accepted') AND expires_at <= statement_timestamp()
+		RETURNING habit_id, expires_at
+	)
+	UPDATE habits h SET streak_count=0
+	WHERE EXISTS (
+		SELECT 1 FROM expired e WHERE e.habit_id=h.id
+			AND NOT EXISTS (
+				SELECT 1 FROM habit_logs l WHERE l.habit_id=h.id
+					AND l.kind='full' AND l.created_at >= e.expires_at
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM recovery_sessions newer WHERE newer.habit_id=h.id
+					AND newer.reported_at >= e.expires_at
+			)
+	)
+`
+
+func (a *App) reconcileExpiredRecoveries(ctx context.Context, userID string) error {
+	tx, err := a.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock habits before touching recovery rows, in the same order as recovery actions.
+	rows, err := tx.Query(ctx, `
+		SELECT h.id::text FROM habits h
+		WHERE h.user_id=$1 AND EXISTS (
+			SELECT 1 FROM recovery_sessions r WHERE r.habit_id=h.id
+				AND r.status IN ('offered','accepted') AND r.expires_at <= statement_timestamp()
+		)
+		ORDER BY h.id FOR UPDATE OF h
+	`, userID)
+	if err != nil {
+		return err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	if len(ids) > 0 {
+		if _, err := tx.Exec(ctx, expireRecoveriesSQL, ids); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
 
 func clamp(n, min, max int) int {
 	if n < min {
@@ -94,6 +147,10 @@ func (a *App) reportMiss(c *gin.Context) {
 		v.Workload = "medium"
 	}
 	ctx := c.Request.Context()
+	if err := a.reconcileExpiredRecoveries(ctx, u.ID); err != nil {
+		fail(c, 500, "Could not update expired recoveries")
+		return
+	}
 	tx, err := a.DB.Begin(ctx)
 	if err != nil {
 		fail(c, 500, "Database unavailable")
@@ -256,22 +313,13 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		fail(c, 500, "Could not load recovery state")
 		return
 	}
+	if status == "expired" {
+		fail(c, 409, "Recovery window expired; history and XP were kept")
+		return
+	}
 	if !time.Now().Before(expiry) && (status == "offered" || status == "accepted") {
-		if _, err = tx.Exec(ctx, `UPDATE recovery_sessions SET status='expired' WHERE id=$1`, c.Param("id")); err != nil {
+		if _, err = tx.Exec(ctx, expireRecoveriesSQL, []string{habitID}); err != nil {
 			fail(c, 500, "Could not expire recovery")
-			return
-		}
-		_, err = tx.Exec(ctx, `
-			UPDATE habits SET streak_count=0 WHERE id=$1
-			AND NOT EXISTS (
-				SELECT 1 FROM habit_logs WHERE habit_id=$1 AND kind='full' AND created_at >= $2
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM recovery_sessions WHERE habit_id=$1 AND reported_at >= $2
-			)
-		`, habitID, expiry)
-		if err != nil {
-			fail(c, 500, "Could not update streak")
 			return
 		}
 		if err = tx.Commit(ctx); err != nil {

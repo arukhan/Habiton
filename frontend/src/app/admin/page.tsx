@@ -295,6 +295,24 @@ export default function Admin() {
                   </div>
                 </section>
 
+                {current.return_to_goal_7d && (
+                  <section className="card" aria-labelledby="admin-return-to-goal">
+                    <h2 id="admin-return-to-goal">{t("G1 · Return to the original goal within 7 days")}</h2>
+                    {current.return_to_goal_7d.eligible > 0 ? (
+                      <p>
+                        <strong>{percent.format(current.return_to_goal_7d.returned / current.return_to_goal_7d.eligible)}</strong>{" "}
+                        {t("{returned} of {eligible} timely recoveries with closed 7-day windows.", {
+                          returned: number.format(current.return_to_goal_7d.returned),
+                          eligible: number.format(current.return_to_goal_7d.eligible),
+                        })}
+                      </p>
+                    ) : (
+                      <p className="muted">{t("No timely recoveries with closed 7-day windows in this period.")}</p>
+                    )}
+                    <p className="muted">{t("Target: at least 50%. The window starts when the miss is reported.")}</p>
+                  </section>
+                )}
+
                 <section
                   className="card"
                   aria-labelledby="admin-recovery-funnel"

@@ -98,7 +98,7 @@ p{line-height:1.65}
 .stat-row.boxed b{font-size:13px}
 .profile-top .penguin-photo{width:98px;height:98px}
 .class-choices button{min-height:42px;font-size:12px}
-.bar-chart{display:flex;align-items:end;justify-content:space-between;gap:6px;min-height:155px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:22px}
+.bar-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;min-height:155px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:22px}
 .bar-chart-column{height:145px;flex:1;display:flex;align-items:center;justify-content:flex-end;flex-direction:column;gap:6px;min-width:0}
 .bar-chart-column .bar{width:min(100%,24px);border-radius:6px 6px 2px 2px;background:var(--purple)}
 .bar-chart-column .bar-recovery{background:#ba89e0}.bar-chart-column .bar-step_up{background:#ee9b63}.bar-chart-column .bar-missed{background:#d9d1db}

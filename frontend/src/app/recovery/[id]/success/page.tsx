@@ -12,7 +12,7 @@ import { useHabiton } from "@/context/AppContext";
 export default function Success() {
   const { locale, t } = useLocale();
   const { id } = useParams<{ id: string }>();
-  const { recoveries } = useHabiton();
+  const { recoveries, habits } = useHabiton();
   const r = recoveries.find((x) => x.id === id);
   if (!r)
     return (
@@ -21,6 +21,15 @@ export default function Success() {
         <h2>{t("Recovery not found")}</h2>
       </Shell>
     );
+  if (!["micro_completed", "step_completed", "completed"].includes(r.status)) {
+    return (
+      <Shell navigation={false}>
+        <h2>{t("This recovery has no completed steps.")}</h2>
+        <Link href={`/recovery/${id}`}>{t("View recovery plan")}</Link>
+      </Shell>
+    );
+  }
+  const currentStreak = habits.find((habit) => habit.id === r.habit_id)?.streak;
   const step =
     r.status === "micro_completed"
       ? "MICRO-QUEST COMPLETE"
@@ -48,6 +57,9 @@ export default function Success() {
         <Flame size={20} />{" "}
         {t("{days} saved", { days: dayCount(locale, r.streak_before) })}
       </div>
+      {currentStreak !== undefined && (
+        <p>{t("Current streak: {days}", { days: dayCount(locale, currentStreak) })}</p>
+      )}
       <div className="card quest-highlight">
         <p className="card-label">{t(step)}</p>
         <h2>
