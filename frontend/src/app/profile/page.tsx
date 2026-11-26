@@ -5,7 +5,8 @@ import { LanguageSelect, useLocale } from "@/context/LocaleContext";
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Check, X, LogOut, Palette, ChevronDown, Moon, Sun } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Achievements } from "@/components/Achievements";
@@ -55,6 +56,34 @@ export default function Profile() {
   const [minutes,setMinutes]=useState(30);
   const [customMinutes,setCustomMinutes]=useState(false);
   const [busy,setBusy]=useState(false);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const habitTitleRef = useRef<HTMLInputElement>(null);
+  const habitEditTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // Keep the modal above the page and prevent the background from scrolling.
+  useEffect(() => {
+    if (!editingHabit) return;
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => habitTitleRef.current?.focus(), 0);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef.current) {
+        setEditingHabit(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = oldOverflow;
+      habitEditTriggerRef.current?.focus();
+    };
+  }, [editingHabit]);
+
+  function closeHabitModal() {
+    if (!busy) setEditingHabit(null);
+  }
 
   const loadLimits=useCallback(async()=>{
     try { const r=await API.recoveryLimits();setLimits(r.limits); }
@@ -73,7 +102,8 @@ export default function Profile() {
     try {await updateProfile({name:name.trim()});setEditingName(false);setNotice("Name updated");}
     catch(e){setError(message(e));} finally{setBusy(false)}
   }
-  function openHabit(h:Habit){
+  function openHabit(h:Habit, trigger: HTMLButtonElement){
+    habitEditTriggerRef.current = trigger;
     setEditingHabit(h);setTitle(h.title);setCategory(h.category);setMinutes(h.target_minutes);
     setCustomMinutes(!minuteOptions.includes(h.target_minutes));setError("");setNotice("");
   }
@@ -147,23 +177,59 @@ export default function Profile() {
       <h2>{t("Manage your habits")}</h2>
       {habits.length===0?<p className="muted">{t("No habits yet.")}</p>:habits.map(h=><div className="profile-habit-row" key={h.id}>
         <div><strong>{h.title}</strong><small>{t(h.category)} · {t("{count} min daily", {count: h.target_minutes})}</small></div>
-        <button type="button" className="profile-edit-button" onClick={()=>openHabit(h)}><Pencil size={15}/> {t("Edit")}</button>
+        <button type="button" className="profile-edit-button" onClick={e=>openHabit(h,e.currentTarget)}><Pencil size={15}/> {t("Edit")}</button>
       </div>)}
     </section>
 
-    {editingHabit&&<section className="card profile-edit-card" aria-label={t("Edit habit")}>
-      <div className="flex-between"><h2>{t("Edit habit")}</h2><button type="button" className="text-button" onClick={()=>setEditingHabit(null)}><X size={16}/> {t("Close")}</button></div>
-      <form onSubmit={saveHabit} className="form-stack">
-        <label>{t("Habit name")}<input value={title} onChange={e=>setTitle(e.target.value)} minLength={2} maxLength={100} required/></label>
-        <label>{t("Category")}<select value={category} onChange={e=>setCategory(e.target.value)}>{Array.from(new Set([...categories,category])).map(v=><option key={v} value={v}>{t(v)}</option>)}</select></label>
-        <label>{t("Daily goal")}<select value={customMinutes?"custom":String(minutes)} onChange={e=>{if(e.target.value==="custom")setCustomMinutes(true);else {setCustomMinutes(false);setMinutes(Number(e.target.value));}}}>
-          {minuteOptions.map(m=><option key={m} value={String(m)}>{t("{count} minutes", {count: m})}</option>)}<option value="custom">{t("Custom minutes")}</option>
-        </select></label>
-        {customMinutes&&<label>{t("Custom goal in minutes")}<input type="number" min={1} max={1440} value={minutes} onChange={e=>setMinutes(Number(e.target.value))} required/></label>}
-        <p className="helper-text">{t("New goal applies to future check-ins. You cannot edit a habit while an active recovery plan is running.")}</p>
-        <div className="profile-actions"><button className="btn-primary" type="submit" disabled={busy}>{busy?t("Saving..."):t("Save changes")}</button><button type="button" className="btn-outline" onClick={()=>setEditingHabit(null)}>{t("Cancel")}</button></div>
-      </form>
-    </section>}
+    {editingHabit && typeof document !== "undefined" && createPortal(
+      <div
+        className="habiton-modal-overlay"
+        onMouseDown={event => { if (event.target === event.currentTarget) closeHabitModal(); }}
+      >
+        <section
+          className="habiton-modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="habiton-edit-habit-heading"
+        >
+          <div className="habiton-modal-header">
+            <h2 id="habiton-edit-habit-heading">{t("Edit habit")}</h2>
+            <button type="button" className="habiton-modal-close" onClick={closeHabitModal} disabled={busy} aria-label={t("Close")}>
+              <X size={20}/>
+            </button>
+          </div>
+          <form onSubmit={saveHabit} className="form-stack habiton-modal-form">
+            <label>{t("Habit name")}
+              <input ref={habitTitleRef} value={title} onChange={e=>setTitle(e.target.value)} minLength={2} maxLength={100} required/>
+            </label>
+            <label>{t("Category")}
+              <select value={category} onChange={e=>setCategory(e.target.value)}>
+                {Array.from(new Set([...categories,category])).map(v=><option key={v} value={v}>{t(v)}</option>)}
+              </select>
+            </label>
+            <label>{t("Daily goal")}
+              <select value={customMinutes?"custom":String(minutes)} onChange={e=>{
+                if(e.target.value==="custom") setCustomMinutes(true);
+                else {setCustomMinutes(false);setMinutes(Number(e.target.value));}
+              }}>
+                {minuteOptions.map(m=><option key={m} value={String(m)}>{t("{count} minutes", {count: m})}</option>)}
+                <option value="custom">{t("Custom minutes")}</option>
+              </select>
+            </label>
+            {customMinutes && <label>{t("Custom goal in minutes")}
+              <input type="number" min={1} max={1440} value={minutes} onChange={e=>setMinutes(Number(e.target.value))} required/>
+            </label>}
+            <p className="helper-text">{t("New goal applies to future check-ins. You cannot edit a habit while an active recovery plan is running.")}</p>
+            {error && <p className="error" role="alert">{translateError(locale, error)}</p>}
+            <div className="profile-actions habiton-modal-actions">
+              <button className="btn-primary" type="submit" disabled={busy}>{busy?t("Saving..."):t("Save changes")}</button>
+              <button type="button" className="btn-outline" onClick={closeHabitModal} disabled={busy}>{t("Cancel")}</button>
+            </div>
+          </form>
+        </section>
+      </div>,
+      document.body
+    )}
 
     <section className="card"><p className="eyebrow">{t("YOUR GROWTH")}</p><h2>{t("How you earn XP")}</h2>
       <div className="profile-xp-row"><span>{t("✅ Complete a habit")}</span><b>+20 XP</b></div>
@@ -202,7 +268,7 @@ export default function Profile() {
     </section>
 
     {notice&&<p className="profile-notice" role="status">{t(notice)}</p>}
-    {error&&<p className="error" role="alert">{translateError(locale, error)}</p>}
+    {error&&!editingHabit&&<p className="error" role="alert">{translateError(locale, error)}</p>}
     <button className="logout" onClick={()=>void logout()}><LogOut size={18}/> {t("Log out")}</button>
     <p className="footer-note">{t("Your pace. Your space. Every day.")}</p>
   </Shell>;
