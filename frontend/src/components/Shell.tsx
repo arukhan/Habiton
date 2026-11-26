@@ -89,9 +89,6 @@ export function Shell({
         {navigation && <Navigation />}
       </div>
 
-      <p className="desktop-tip">
-        {t("Habiton · A little, every day. 🌱")}
-      </p>
     </main>
   );
 }
