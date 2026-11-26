@@ -341,10 +341,6 @@ export default function Today() {
         </section>
       )}
 
-      {/* Footer */}
-      <p className="footer-note">
-        {t("🐧 Progress is personal. No leaderboards, no punishment.")}
-      </p>
     </Shell>
   );
 }
