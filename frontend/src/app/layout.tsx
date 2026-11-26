@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { AppProvider } from "@/context/AppContext";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { Analytics } from "@vercel/analytics/next";
 export const metadata: Metadata = {
   title: "Habiton — Small steps, real growth",
   description:
@@ -32,6 +33,7 @@ export default function RootLayout({
             <AppProvider>{children}</AppProvider>
           </ThemeProvider>
         </LocaleProvider>
+        <Analytics />
       </body>
     </html>
   );
