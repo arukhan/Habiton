@@ -14,7 +14,9 @@ import { PersonalRewardCard } from "@/components/PersonalRewardCard";
 import { useThemeSettings, type ThemeName } from "@/components/ThemeProvider";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
-import type { Habit } from "@/types";
+import { HabitGoalFields } from "@/components/HabitGoalFields";
+import { goalLabel, habitGoal, habitInput } from "@/lib/habitGoals";
+import type { Habit, HabitGoal } from "@/types";
 
 type HeroClass = "Warrior" | "Mage" | "Priest";
 type Limit = {habit_id:string;used:number;remaining:number;limit:number};
@@ -28,7 +30,6 @@ const descriptions: Record<HeroClass,string> = {
   Mage:"A curious penguin who grows through learning.",
   Priest:"A caring penguin who values balance and healing.",
 };
-const minuteOptions=[5,10,15,20,30,45,60,90,120];
 const categories=["Study","Reading","Fitness","Health","Mindfulness","Other"];
 const palettes: { key: ThemeName; label: string; color: string }[] = [
   {key:"lavender",label:"Lavender",color:"#7535b5"},
@@ -53,8 +54,7 @@ export default function Profile() {
   const [editingHabit,setEditingHabit]=useState<Habit|null>(null);
   const [title,setTitle]=useState("");
   const [category,setCategory]=useState("Study");
-  const [minutes,setMinutes]=useState(30);
-  const [customMinutes,setCustomMinutes]=useState(false);
+  const [goal, setGoal] = useState<HabitGoal>({ type: "minutes", amount: 30 });
   const [busy,setBusy]=useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -104,14 +104,14 @@ export default function Profile() {
   }
   function openHabit(h:Habit, trigger: HTMLButtonElement){
     habitEditTriggerRef.current = trigger;
-    setEditingHabit(h);setTitle(h.title);setCategory(h.category);setMinutes(h.target_minutes);
-    setCustomMinutes(!minuteOptions.includes(h.target_minutes));setError("");setNotice("");
+    setEditingHabit(h);setTitle(h.title);setCategory(h.category);setGoal(habitGoal(h));
+    setError("");setNotice("");
   }
   async function saveHabit(e:FormEvent){
     e.preventDefault();if(!editingHabit)return;
     setError("");setNotice("");setBusy(true);
     try {
-      await API.updateHabit(editingHabit.id,{title:title.trim(),category,target_minutes:minutes});
+      await API.updateHabit(editingHabit.id, habitInput(title.trim(), category, goal));
       await refresh();setEditingHabit(null);setNotice("Habit updated. Previous sessions are unchanged.");
       await loadLimits();
     }catch(e){setError(message(e));}finally{setBusy(false)}
@@ -176,7 +176,7 @@ export default function Profile() {
       <p className="eyebrow">{t("MY HABITS")}</p>
       <h2>{t("Manage your habits")}</h2>
       {habits.length===0?<p className="muted">{t("No habits yet.")}</p>:habits.map(h=><div className="profile-habit-row" key={h.id}>
-        <div><strong>{h.title}</strong><small>{t(h.category)} · {t("{count} min daily", {count: h.target_minutes})}</small></div>
+        <div><strong>{h.title}</strong><small>{[t(h.category), goalLabel(locale, habitGoal(h))].filter(Boolean).join(" · ")}</small></div>
         <button type="button" className="profile-edit-button" onClick={e=>openHabit(h,e.currentTarget)}><Pencil size={15}/> {t("Edit")}</button>
       </div>)}
     </section>
@@ -207,18 +207,7 @@ export default function Profile() {
                 {Array.from(new Set([...categories,category])).map(v=><option key={v} value={v}>{t(v)}</option>)}
               </select>
             </label>
-            <label>{t("Daily goal")}
-              <select value={customMinutes?"custom":String(minutes)} onChange={e=>{
-                if(e.target.value==="custom") setCustomMinutes(true);
-                else {setCustomMinutes(false);setMinutes(Number(e.target.value));}
-              }}>
-                {minuteOptions.map(m=><option key={m} value={String(m)}>{t("{count} minutes", {count: m})}</option>)}
-                <option value="custom">{t("Custom minutes")}</option>
-              </select>
-            </label>
-            {customMinutes && <label>{t("Custom goal in minutes")}
-              <input type="number" min={1} max={1440} value={minutes} onChange={e=>setMinutes(Number(e.target.value))} required/>
-            </label>}
+            <HabitGoalFields goal={goal} category={category} onChange={setGoal} />
             <p className="helper-text">{t("New goal applies to future check-ins. You cannot edit a habit while an active recovery plan is running.")}</p>
             {error && <p className="error" role="alert">{translateError(locale, error)}</p>}
             <div className="profile-actions habiton-modal-actions">

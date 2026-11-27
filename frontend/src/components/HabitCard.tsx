@@ -3,6 +3,7 @@
 
 import { useLocale } from "@/context/LocaleContext";
 
+import { goalLabel, habitGoal } from "@/lib/habitGoals";
 import type { Habit } from "@/types";
 import {
   BookOpen,
@@ -28,7 +29,8 @@ export function HabitCard({
   busy = false,
   readOnly = false,
 }: HabitCardProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
+  const target = goalLabel(locale, habitGoal(habit));
 
   const category = habit.category.toLowerCase();
 
@@ -49,10 +51,12 @@ export function HabitCard({
       <div className="habit-info">
         <strong className={habit.completed_today ? "habit-title-completed" : undefined}>{habit.title}</strong>
 
-        <small>
-          {t("{count} min daily", { count: habit.target_minutes })}
-          {!readOnly && <> · 🔥 {t("{count}-day streak", { count: habit.streak })}</>}
-        </small>
+        {(target || !readOnly) && (
+          <small>
+            {target}
+            {!readOnly && <>{target && " · "}🔥 {t("{count}-day streak", { count: habit.streak })}</>}
+          </small>
+        )}
       </div>
 
       {onArchive && !readOnly && (

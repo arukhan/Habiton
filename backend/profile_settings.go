@@ -49,19 +49,15 @@ func (a *App) habitRecoveryLimits(c *gin.Context) {
 // recovery quests. Only the owner of the habit can edit it.
 func (a *App) updateHabit(c *gin.Context) {
 	u, _ := a.current(c)
-	var v struct {
-		Title         string `json:"title"`
-		Category      string `json:"category"`
-		TargetMinutes int    `json:"target_minutes"`
-	}
+	var v habitInput
 	if err := c.ShouldBindJSON(&v); err != nil {
 		fail(c, 400, "Invalid habit details")
 		return
 	}
 	v.Title = strings.TrimSpace(v.Title)
 	v.Category = strings.TrimSpace(v.Category)
-	if len(v.Title) < 2 || len(v.Title) > 100 || len(v.Category) < 1 || len(v.Category) > 32 || v.TargetMinutes < 1 || v.TargetMinutes > 1440 {
-		fail(c, 400, "Enter a habit name, category and goal between 1 and 1440 minutes")
+	if len(v.Title) < 2 || len(v.Title) > 100 || len(v.Category) < 1 || len(v.Category) > 32 {
+		fail(c, 400, "Enter a valid habit name and category")
 		return
 	}
 	ctx := c.Request.Context()
@@ -72,7 +68,8 @@ func (a *App) updateHabit(c *gin.Context) {
 	}
 	defer tx.Rollback(ctx)
 	var currentID string
-	err = tx.QueryRow(ctx, `SELECT id::text FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&currentID)
+	var existingGoal *HabitGoal
+	err = tx.QueryRow(ctx, `SELECT id::text, goal FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&currentID, &existingGoal)
 	if err != nil {
 		fail(c, 404, "Habit not found")
 		return
@@ -87,7 +84,18 @@ func (a *App) updateHabit(c *gin.Context) {
 		fail(c, 409, "Finish your active Recovery Flow before editing this habit")
 		return
 	}
-	_, err = tx.Exec(ctx, `UPDATE habits SET title=$3,category=$4,target_minutes=$5 WHERE id=$1 AND user_id=$2`, currentID, u.ID, v.Title, v.Category, v.TargetMinutes)
+	if v.Goal == nil && existingGoal != nil {
+		// An older client can edit the title/category without erasing a typed goal.
+		v.Goal = existingGoal
+		if existingGoal.Type == "minutes" {
+			v.Goal.Amount = v.TargetMinutes
+		}
+	}
+	if !v.normalizeGoal() {
+		fail(c, 400, "Enter a valid habit goal")
+		return
+	}
+	_, err = tx.Exec(ctx, `UPDATE habits SET title=$3,category=$4,target_minutes=$5,goal=$6 WHERE id=$1 AND user_id=$2`, currentID, u.ID, v.Title, v.Category, v.TargetMinutes, v.Goal)
 	if err != nil {
 		fail(c, 500, "Could not update habit")
 		return
@@ -96,6 +104,6 @@ func (a *App) updateHabit(c *gin.Context) {
 		fail(c, 500, "Could not save habit")
 		return
 	}
-	a.event(ctx, u, "habit_updated", gin.H{"habit_id": currentID, "category": v.Category})
+	a.event(ctx, u, "habit_updated", gin.H{"habit_id": currentID, "category": v.Category, "goal_type": v.Goal.Type})
 	c.JSON(200, gin.H{"ok": true})
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -84,16 +83,7 @@ func clamp(n, min, max int) int {
 	return n
 }
 
-func template(category, reason string, minutes int) (string, string, string) {
-	m := clamp(int(math.Ceil(float64(minutes)/6)), 2, 10)
-	step := clamp(int(math.Ceil(float64(minutes)/2)), m+1, minutes)
-	if minutes <= 3 {
-		m = 1
-		step = minutes
-	}
-	if step > minutes {
-		step = minutes
-	}
+func formatTimedTemplate(category, reason string, m, step int) (string, string, string) {
 	var micro, stepText string
 	switch strings.ToLower(category) {
 	case "reading":
@@ -159,7 +149,8 @@ func (a *App) reportMiss(c *gin.Context) {
 	defer tx.Rollback(ctx)
 	var title, category string
 	var minutes, streak, consecutive int
-	err = tx.QueryRow(ctx, `SELECT title,category,target_minutes,streak_count,consecutive_recoveries FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&title, &category, &minutes, &streak, &consecutive)
+	var storedGoal *HabitGoal
+	err = tx.QueryRow(ctx, `SELECT title,category,target_minutes,goal,streak_count,consecutive_recoveries FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&title, &category, &minutes, &storedGoal, &streak, &consecutive)
 	if err != nil {
 		fail(c, 404, "Habit not found")
 		return
@@ -222,17 +213,11 @@ func (a *App) reportMiss(c *gin.Context) {
 		fail(c, 409, msg)
 		return
 	}
-	micro, stepText, tmpl := template(category, v.Reason, minutes)
-	microMinutes := clamp(int(math.Ceil(float64(minutes)/6)), 2, 10)
-	if minutes <= 3 {
-		microMinutes = 1
-	}
-	stepMinutes := clamp(int(math.Ceil(float64(minutes)/2)), microMinutes+1, minutes)
-	if minutes <= 3 {
-		stepMinutes = minutes
-	}
+	goal := resolveGoal(storedGoal, minutes)
+	goals, micro, stepText, tmpl := recoveryPlan(goal, category, v.Reason)
+	microMinutes, stepMinutes := goals.Micro.minutes(), goals.Step.minutes()
 	id := newID()
-	_, err = tx.Exec(ctx, `INSERT INTO recovery_sessions(id,user_id,habit_id,missed_date,reason,workload,energy,streak_before,micro_minutes,step_minutes,micro_text,step_text,expires_at,template_name) VALUES($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '48 hours',$13)`, id, u.ID, c.Param("id"), v.MissedDate, v.Reason, v.Workload, v.Energy, streak, microMinutes, stepMinutes, micro, stepText, tmpl)
+	_, err = tx.Exec(ctx, `INSERT INTO recovery_sessions(id,user_id,habit_id,missed_date,reason,workload,energy,streak_before,micro_minutes,step_minutes,micro_text,step_text,expires_at,template_name,goals) VALUES($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,now()+interval '48 hours',$13,$14)`, id, u.ID, c.Param("id"), v.MissedDate, v.Reason, v.Workload, v.Energy, streak, microMinutes, stepMinutes, micro, stepText, tmpl, goals)
 	if err != nil {
 		fail(c, 409, "This day has already been reported")
 		return
@@ -246,14 +231,14 @@ func (a *App) reportMiss(c *gin.Context) {
 		fail(c, 500, "Could not save")
 		return
 	}
-	a.event(ctx, u, "missed_day_reported", gin.H{"habit_id": c.Param("id"), "reason": v.Reason, "recovery_id": id})
-	a.event(ctx, u, "recovery_offered", gin.H{"habit_id": c.Param("id"), "recovery_id": id, "template": tmpl})
-	c.JSON(201, gin.H{"id": id, "habit_title": title, "status": "offered", "micro_text": micro, "micro_minutes": microMinutes, "step_minutes": stepMinutes, "streak_before": streak, "remaining_windows": 2 - count, "expires_in_hours": 48})
+	a.event(ctx, u, "missed_day_reported", gin.H{"habit_id": c.Param("id"), "reason": v.Reason, "recovery_id": id, "goal_type": goal.Type})
+	a.event(ctx, u, "recovery_offered", gin.H{"habit_id": c.Param("id"), "recovery_id": id, "template": tmpl, "goal_type": goal.Type})
+	c.JSON(201, gin.H{"id": id, "habit_title": title, "status": "offered", "micro_text": micro, "micro_minutes": microMinutes, "step_minutes": stepMinutes, "streak_before": streak, "remaining_windows": 2 - count, "expires_in_hours": 48, "goals": goals})
 }
 
 func (a *App) active(c *gin.Context) {
 	u, _ := a.current(c)
-	rows, err := a.DB.Query(c.Request.Context(), `SELECT r.id::text,h.id::text,h.title,h.target_minutes,r.reason,r.status,r.micro_minutes,r.step_minutes,r.micro_text,r.step_text,r.streak_before,r.reported_at,r.expires_at,r.missed_date::text,r.hero_log,(SELECT count(*) FROM recovery_sessions x WHERE x.habit_id=r.habit_id AND x.reported_at>=now()-interval '30 days') FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id WHERE r.user_id=$1 ORDER BY r.reported_at DESC LIMIT 20`, u.ID)
+	rows, err := a.DB.Query(c.Request.Context(), `SELECT r.id::text,h.id::text,h.title,h.target_minutes,r.goals,r.reason,r.status,r.micro_minutes,r.step_minutes,r.micro_text,r.step_text,r.streak_before,r.reported_at,r.expires_at,r.missed_date::text,r.hero_log,(SELECT count(*) FROM recovery_sessions x WHERE x.habit_id=r.habit_id AND x.reported_at>=now()-interval '30 days') FROM recovery_sessions r JOIN habits h ON h.id=r.habit_id WHERE r.user_id=$1 ORDER BY r.reported_at DESC LIMIT 20`, u.ID)
 	if err != nil {
 		fail(c, 500, "Database error")
 		return
@@ -265,7 +250,8 @@ func (a *App) active(c *gin.Context) {
 		var original, mm, sm, streak, count int
 		var reported, expires time.Time
 		var hero *string
-		if rows.Scan(&id, &hid, &title, &original, &reason, &status, &mm, &sm, &micro, &step, &streak, &reported, &expires, &missed, &hero, &count) != nil {
+		var savedGoals *RecoveryGoals
+		if rows.Scan(&id, &hid, &title, &original, &savedGoals, &reason, &status, &mm, &sm, &micro, &step, &streak, &reported, &expires, &missed, &hero, &count) != nil {
 			continue
 		}
 		if !time.Now().Before(expires) && (status == "offered" || status == "accepted") {
@@ -275,7 +261,8 @@ func (a *App) active(c *gin.Context) {
 		if hero != nil {
 			logText = *hero
 		}
-		items = append(items, gin.H{"id": id, "habit_id": hid, "habit_title": title, "original_minutes": original, "reason": reason, "status": status, "micro_minutes": mm, "step_minutes": sm, "micro_text": micro, "step_text": step, "streak_before": streak, "reported_at": reported, "expires_at": expires, "missed_date": missed, "remaining_windows": clamp(3-count, 0, 3), "hero_log": logText})
+		goals := resolveRecoveryGoals(savedGoals, original, mm, sm)
+		items = append(items, gin.H{"id": id, "habit_id": hid, "habit_title": title, "original_minutes": goals.Original.minutes(), "goals": goals, "reason": reason, "status": status, "micro_minutes": mm, "step_minutes": sm, "micro_text": micro, "step_text": step, "streak_before": streak, "reported_at": reported, "expires_at": expires, "missed_date": missed, "remaining_windows": clamp(3-count, 0, 3), "hero_log": logText})
 	}
 	c.JSON(200, gin.H{"recoveries": items})
 }
@@ -305,10 +292,11 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 	var status string
 	var expiry time.Time
 	var micro, step int
+	var savedGoals *RecoveryGoals
 	err = tx.QueryRow(ctx, `
-		SELECT status,expires_at,micro_minutes,step_minutes
+		SELECT status,expires_at,micro_minutes,step_minutes,goals
 		FROM recovery_sessions WHERE id=$1 AND user_id=$2
-	`, c.Param("id"), u.ID).Scan(&status, &expiry, &micro, &step)
+	`, c.Param("id"), u.ID).Scan(&status, &expiry, &micro, &step, &savedGoals)
 	if err != nil {
 		fail(c, 500, "Could not load recovery state")
 		return
@@ -329,11 +317,18 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		fail(c, 409, "Recovery window expired; history and XP were kept")
 		return
 	}
+	goals := resolveRecoveryGoals(savedGoals, original, micro, step)
 	type stage struct {
 		expected, next, kind, event string
-		minutes, xp                 int
+		goal                        HabitGoal
+		xp                          int
 	}
-	stageByAction := map[string]stage{"accept": {"offered", "accepted", "", "recovery_started", 0, 0}, "micro": {"accepted", "micro_completed", "recovery", "recovery_completed", micro, 10}, "step": {"micro_completed", "step_completed", "step_up", "step_up_completed", step, 10}, "original": {"step_completed", "completed", "full", "full_difficulty_restored", original, 20}}
+	stageByAction := map[string]stage{
+		"accept":   {"offered", "accepted", "", "recovery_started", HabitGoal{}, 0},
+		"micro":    {"accepted", "micro_completed", "recovery", "recovery_completed", goals.Micro, 10},
+		"step":     {"micro_completed", "step_completed", "step_up", "step_up_completed", goals.Step, 10},
+		"original": {"step_completed", "completed", "full", "full_difficulty_restored", goals.Original, 20},
+	}
 	s := stageByAction[action]
 	if status != s.expected {
 		fail(c, 409, "Complete the previous step first")
@@ -354,7 +349,7 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 			return
 		}
 		data, _ := json.Marshal(v.Notes)
-		log, err := tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,notes) VALUES($1,$2,$3,$4::date,$5,$6,$7) ON CONFLICT(habit_id,log_date,kind) DO NOTHING`, newID(), u.ID, habitID, localDate(), s.kind, s.minutes, data)
+		log, err := tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,notes,goal) VALUES($1,$2,$3,$4::date,$5,$6,$7,$8) ON CONFLICT(habit_id,log_date,kind) DO NOTHING`, newID(), u.ID, habitID, localDate(), s.kind, s.goal.minutes(), data, s.goal)
 		if err != nil {
 			fail(c, 500, "Could not save the check-in")
 			return
@@ -410,6 +405,6 @@ func (a *App) recoveryAction(c *gin.Context, action string) {
 		fail(c, 500, "Commit failed")
 		return
 	}
-	a.event(ctx, u, s.event, gin.H{"recovery_id": c.Param("id"), "habit_id": habitID, "xp_awarded": xpAwarded, "minutes": s.minutes})
+	a.event(ctx, u, s.event, gin.H{"recovery_id": c.Param("id"), "habit_id": habitID, "xp_awarded": xpAwarded, "minutes": s.goal.minutes(), "goal_type": goals.Original.Type})
 	c.JSON(200, gin.H{"ok": true, "status": s.next, "xp_awarded": xpAwarded, "hero_log": hero})
 }

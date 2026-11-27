@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Shell } from "@/components/Shell";
 import { useHabiton } from "@/context/AppContext";
+import { goalLabel } from "@/lib/habitGoals";
 import { useLocale } from "@/context/LocaleContext";
 import { niceDate } from "@/lib/dates";
 import type { User } from "@/types";
@@ -74,10 +75,11 @@ export default function HeroLog() {
                   </time>
                 </div>
                 <h2>{activity.habit_title}</h2>
-                {activity.minutes > 0 && (
-                  <span className="muted">
-                    {t("{count} min", { count: activity.minutes })}
-                  </span>
+                {activity.goal && activity.goal.type !== "action" && (
+                  <span className="muted">{goalLabel(locale, activity.goal)}</span>
+                )}
+                {!activity.goal && activity.minutes > 0 && (
+                  <span className="muted">{t("{count} min", { count: activity.minutes })}</span>
                 )}
                 <p>{t(entry.lines[heroClass])}</p>
               </li>

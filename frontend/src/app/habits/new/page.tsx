@@ -11,7 +11,9 @@ import { Penguin } from "@/components/Penguin";
 import { API } from "@/lib/api";
 import { useHabiton } from "@/context/AppContext";
 
-const MINUTE_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
+import { HabitGoalFields } from "@/components/HabitGoalFields";
+import { habitInput } from "@/lib/habitGoals";
+import type { HabitGoal } from "@/types";
 const starterHabits = [
   { title: "Read", category: "Reading", minutes: 10 },
   { title: "Take a walk", category: "Fitness", minutes: 15 },
@@ -25,29 +27,23 @@ export default function CreateHabit() {
   const { refresh } = useHabiton();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Study");
-  const [target, setTarget] = useState(30);
-  const [customMinutes, setCustomMinutes] = useState(false);
+  const [goal, setGoal] = useState<HabitGoal>({ type: "minutes", amount: 30 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   function chooseStarter(starter: (typeof starterHabits)[number]) {
     setTitle(t(starter.title));
     setCategory(starter.category);
-    setTarget(starter.minutes);
-    setCustomMinutes(false);
+    setGoal({ type: "minutes", amount: starter.minutes });
     setError("");
   }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    if (!Number.isInteger(target) || target < 1 || target > 1440) {
-      setError("Choose a daily goal between 1 and 1440 minutes.");
-      return;
-    }
     setBusy(true);
     try {
-      await API.createHabit({ title, category, target_minutes: target });
+      await API.createHabit(habitInput(title, category, goal));
       await refresh();
       router.push("/today");
     } catch (e) {
@@ -121,41 +117,7 @@ export default function CreateHabit() {
             ))}
           </select>
         </label>
-        <label>
-          {t("Daily goal in minutes")}
-          <select
-            value={customMinutes ? "custom" : String(target)}
-            onChange={(e) => {
-              if (e.target.value === "custom") {
-                setCustomMinutes(true);
-              } else {
-                setCustomMinutes(false);
-                setTarget(Number(e.target.value));
-              }
-            }}
-          >
-            {MINUTE_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {t("{count} minutes", { count: n })}
-              </option>
-            ))}
-            <option value="custom">{t("Custom minutes…")}</option>
-          </select>
-        </label>
-        {customMinutes && (
-          <label>
-            {t("Custom goal (1–1440 minutes)")}
-            <input
-              type="number"
-              min={1}
-              max={1440}
-              step={1}
-              required
-              value={target}
-              onChange={(e) => setTarget(Number(e.target.value))}
-            />
-          </label>
-        )}
+        <HabitGoalFields goal={goal} category={category} onChange={setGoal} />
         <div className="gentle-message">
           {t(
             "💜 Consistency is not perfection. If you miss a day after building a streak, Habiton can offer a smaller recovery quest.",

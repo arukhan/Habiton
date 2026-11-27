@@ -1,5 +1,6 @@
 "use client";
 
+import { goalLabel, recoveryGoal } from "@/lib/habitGoals";
 import { dayCount } from "@/lib/translations";
 import { useLocale } from "@/context/LocaleContext";
 import Link from "next/link";
@@ -36,6 +37,8 @@ export default function Success() {
       : r.status === "step_completed"
         ? "STEP-UP COMPLETE"
         : "ORIGINAL GOAL COMPLETE";
+  const stage = r.status === "micro_completed" ? "micro" : r.status === "step_completed" ? "step" : "original";
+  const target = goalLabel(locale, recoveryGoal(r, stage));
   return (
     <Shell navigation={false}>
       <Link href="/today" className="back-link">
@@ -62,16 +65,7 @@ export default function Success() {
       )}
       <div className="card quest-highlight">
         <p className="card-label">{t(step)}</p>
-        <h2>
-          {t("{count} min", {
-            count:
-              r.status === "micro_completed"
-                ? r.micro_minutes
-                : r.status === "step_completed"
-                  ? r.step_minutes
-                  : r.original_minutes,
-          })}{" "}
-          · {r.habit_title}
+        <h2>{target && `${target} · `}{r.habit_title}
         </h2>
         <p>
           {t(

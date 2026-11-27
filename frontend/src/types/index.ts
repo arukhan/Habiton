@@ -1,8 +1,14 @@
+export type HabitGoal =
+  | { type: "minutes"; amount: number; micro_quest?: string }
+  | { type: "repetitions"; amount: number; unit?: string; micro_quest?: string }
+  | { type: "action"; micro_quest?: string };
+export type HabitInput = { title: string; category: string; goal: HabitGoal; target_minutes?: number };
+export type RecoveryGoals = { original: HabitGoal; micro: HabitGoal; step: HabitGoal };
 export type User={id:string;name:string;email:string;hero_class:"Warrior"|"Mage"|"Priest";xp:number;level:number;xp_in_level:number;xp_next:number;is_demo:boolean;is_admin?:boolean};
-export type Habit={id:string;title:string;category:string;target_minutes:number;streak:number;best_streak:number;consecutive_recoveries:number;completed_today:boolean};
+export type Habit={id:string;title:string;category:string;target_minutes:number;goal?:HabitGoal;streak:number;best_streak:number;consecutive_recoveries:number;completed_today:boolean};
 export type RecoveryStatus="offered"|"accepted"|"micro_completed"|"step_completed"|"completed"|"expired";
-export type Recovery={id:string;habit_id:string;habit_title:string;original_minutes:number;reason:string;status:RecoveryStatus;micro_minutes:number;step_minutes:number;micro_text:string;step_text:string;streak_before:number;reported_at:string;expires_at:string;missed_date:string;remaining_windows:number;hero_log:string};
-export type History={date:string;kind:string;minutes:number;habit_title:string};
+export type Recovery={id:string;habit_id:string;habit_title:string;original_minutes:number;goals?:RecoveryGoals;reason:string;status:RecoveryStatus;micro_minutes:number;step_minutes:number;micro_text:string;step_text:string;streak_before:number;reported_at:string;expires_at:string;missed_date:string;remaining_windows:number;hero_log:string};
+export type History={date:string;kind:string;minutes:number;goal?:HabitGoal|null;habit_title:string};
 export type DailyCompletion={date:string;total_habits:number;completed_habits:number;percentage:number};
 export type Insights={total_habits:number;full_sessions:number;perfect_days:number;daily_completion:DailyCompletion[];recoveries:number;step_ups:number;best_streak:number;history:History[];achievements?:Achievements};
 export type Achievements={first_step:boolean;three_days:boolean;comeback:boolean};
@@ -42,6 +48,7 @@ export type WeekHabit = {
   title: string;
   category: string;
   target_minutes: number;
+  goal?: HabitGoal;
   completed: boolean;
 };
 

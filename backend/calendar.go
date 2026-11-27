@@ -8,11 +8,12 @@ import (
 
 // HabitDateView is a read-only snapshot. Only /habits/:id/complete can edit today.
 type HabitDateView struct {
-	ID            string `json:"id"`
-	Title         string `json:"title"`
-	Category      string `json:"category"`
-	TargetMinutes int    `json:"target_minutes"`
-	Completed     bool   `json:"completed"`
+	ID            string     `json:"id"`
+	Title         string     `json:"title"`
+	Category      string     `json:"category"`
+	TargetMinutes int        `json:"target_minutes"`
+	Goal          *HabitGoal `json:"goal,omitempty"`
+	Completed     bool       `json:"completed"`
 }
 type DayView struct {
 	Date   string          `json:"date"`
@@ -44,6 +45,8 @@ func (a *App) habitWeek(c *gin.Context) {
 	// LEAST makes those historical records visible just as in the insights query.
 	const query = `
         SELECT d.day::text, h.id::text, h.title, h.category, h.target_minutes,
+               COALESCE((SELECT l.goal FROM habit_logs l WHERE l.habit_id=h.id
+                         AND l.log_date=d.day AND l.kind='full'), h.goal),
                EXISTS (SELECT 1 FROM habit_logs l
                        WHERE l.habit_id=h.id AND l.user_id=$1
                          AND l.log_date=d.day AND l.kind='full') AS completed
@@ -68,7 +71,7 @@ func (a *App) habitWeek(c *gin.Context) {
 		var date string
 		var h HabitDateView
 		if err := rows.Scan(&date, &h.ID, &h.Title, &h.Category,
-			&h.TargetMinutes, &h.Completed); err != nil {
+			&h.TargetMinutes, &h.Goal, &h.Completed); err != nil {
 			fail(c, 500, "Could not read weekly habits")
 			return
 		}

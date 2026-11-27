@@ -11,8 +11,8 @@ func TestClamp(t *testing.T) {
 	}
 }
 func TestTemplate(t *testing.T) {
-	micro, step, name := template("Reading", "exams", 30)
-	if !strings.Contains(micro, "5 minutes") || !strings.Contains(step, "15 minutes") || name != "template_reading_exams" {
+	plan, micro, step, name := recoveryPlan(minuteGoal(30), "Reading", "exams")
+	if !strings.Contains(micro, "5 minutes") || !strings.Contains(step, "15 minutes") || name != "template_reading_exams" || plan.Micro.Amount != 5 || plan.Step.Amount != 15 {
 		t.Fatalf("unexpected template: %q %q %q", micro, step, name)
 	}
 }

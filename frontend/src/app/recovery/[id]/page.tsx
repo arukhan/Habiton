@@ -10,6 +10,7 @@ import { Penguin } from "@/components/Penguin";
 import { ProgressSteps } from "@/components/ProgressSteps";
 import { useHabiton } from "@/context/AppContext";
 import { API } from "@/lib/api";
+import { goalLabel, recoveryGoal } from "@/lib/habitGoals";
 import { hoursLeft } from "@/lib/dates";
 export default function RecoveryDetail() {
   const { locale, t } = useLocale();
@@ -51,28 +52,29 @@ export default function RecoveryDetail() {
         <Link href="/today">{t("Back to Today")}</Link>
       </Shell>
     );
+  const micro = recoveryGoal(r, "micro");
+  const step = recoveryGoal(r, "step");
+  const original = recoveryGoal(r, "original");
+  const microLabel = goalLabel(locale, micro);
   const current =
     r.status === "accepted"
       ? {
           name: "Micro-quest",
-          minutes: r.micro_minutes,
+          label: microLabel,
           description: translateQuest(locale, r.micro_text, r.micro_minutes),
           action: "micro" as const,
         }
       : r.status === "micro_completed"
         ? {
             name: "Step-up",
-            minutes: r.step_minutes,
+            label: goalLabel(locale, step),
             description: translateQuest(locale, r.step_text, r.step_minutes),
             action: "step" as const,
           }
         : {
             name: "Original goal",
-            minutes: r.original_minutes,
-            description: t(
-              "Complete your full {minutes}-minute {habit} session.",
-              { minutes: r.original_minutes, habit: r.habit_title },
-            ),
+            label: goalLabel(locale, original),
+            description: t("Complete your full habit: {habit}.", { habit: r.habit_title }),
             action: "original" as const,
           };
   return (
@@ -102,7 +104,7 @@ export default function RecoveryDetail() {
       <div className="card quest-highlight">
         <p className="card-label">{t("YOUR MICRO-QUEST")}</p>
         <h2>
-          {t("{count} min", { count: r.micro_minutes })} · {r.habit_title}
+          {microLabel && `${microLabel} · `}{r.habit_title}
         </h2>
         <p>{translateQuest(locale, r.micro_text, r.micro_minutes)}</p>
         {(r.status === "offered" || r.status === "accepted") && (
@@ -133,7 +135,7 @@ export default function RecoveryDetail() {
             className="btn-primary"
             onClick={() => action("accept")}
           >
-            {t("Accept {count}-minute quest", { count: r.micro_minutes })}
+            {t("Accept micro-quest")}
           </button>
         </>
       ) : r.status === "expired" ? (
@@ -148,8 +150,8 @@ export default function RecoveryDetail() {
         <>
           <div className="card">
             <div className="eyebrow">
-              {t(current.name).toUpperCase()} ·{" "}
-              {t("{count} min", { count: current.minutes }).toUpperCase()}
+              {t(current.name).toUpperCase()}
+              {current.label && ` · ${current.label}`}
             </div>
             <h2>{t("Do the task. Then tell us.")}</h2>
             <p className="muted">{current.description}</p>

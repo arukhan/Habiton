@@ -24,15 +24,16 @@ func (a *App) insights(c *gin.Context) {
 		fail(c, 500, "Could not load achievements")
 		return
 	}
-	rows, err := a.DB.Query(c.Request.Context(), `SELECT l.log_date::text,l.kind,CASE WHEN l.kind='full' AND l.minutes=0 THEN h.target_minutes ELSE l.minutes END,h.title FROM habit_logs l JOIN habits h ON h.id=l.habit_id WHERE l.user_id=$1 ORDER BY l.log_date DESC,l.created_at DESC LIMIT 35`, u.ID)
+	rows, err := a.DB.Query(c.Request.Context(), `SELECT l.log_date::text,l.kind,CASE WHEN l.kind='full' AND l.minutes=0 AND l.goal IS NULL THEN h.target_minutes ELSE l.minutes END,h.title,l.goal FROM habit_logs l JOIN habits h ON h.id=l.habit_id WHERE l.user_id=$1 ORDER BY l.log_date DESC,l.created_at DESC LIMIT 35`, u.ID)
 	items := []gin.H{}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var date, kind, title string
 			var minutes int
-			if rows.Scan(&date, &kind, &minutes, &title) == nil {
-				items = append(items, gin.H{"date": date, "kind": kind, "minutes": minutes, "habit_title": title})
+			var goal *HabitGoal
+			if rows.Scan(&date, &kind, &minutes, &title, &goal) == nil {
+				items = append(items, gin.H{"date": date, "kind": kind, "minutes": minutes, "habit_title": title, "goal": goal})
 			}
 		}
 	}

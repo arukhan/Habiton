@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 func (a *App) habits(c *gin.Context) {
@@ -12,7 +13,7 @@ func (a *App) habits(c *gin.Context) {
 		fail(c, 500, "Could not update expired recoveries")
 		return
 	}
-	rows, err := a.DB.Query(c.Request.Context(), `SELECT h.id::text,h.title,h.category,h.target_minutes,h.streak_count,h.best_streak, h.consecutive_recoveries, EXISTS(SELECT 1 FROM habit_logs l WHERE l.habit_id=h.id AND l.log_date=$2::date AND l.kind='full') FROM habits h WHERE h.user_id=$1 AND NOT h.archived ORDER BY h.created_at DESC`, u.ID, localDate())
+	rows, err := a.DB.Query(c.Request.Context(), `SELECT h.id::text,h.title,h.category,h.target_minutes,h.goal,h.streak_count,h.best_streak, h.consecutive_recoveries, EXISTS(SELECT 1 FROM habit_logs l WHERE l.habit_id=h.id AND l.log_date=$2::date AND l.kind='full') FROM habits h WHERE h.user_id=$1 AND NOT h.archived ORDER BY h.created_at DESC`, u.ID, localDate())
 	if err != nil {
 		fail(c, 500, "Database error")
 		return
@@ -23,8 +24,9 @@ func (a *App) habits(c *gin.Context) {
 		var id, title, category string
 		var minutes, streak, best, consecutive int
 		var done bool
-		if rows.Scan(&id, &title, &category, &minutes, &streak, &best, &consecutive, &done) == nil {
-			items = append(items, gin.H{"id": id, "title": title, "category": category, "target_minutes": minutes, "streak": streak, "best_streak": best, "consecutive_recoveries": consecutive, "completed_today": done})
+		var goal *HabitGoal
+		if rows.Scan(&id, &title, &category, &minutes, &goal, &streak, &best, &consecutive, &done) == nil {
+			items = append(items, gin.H{"id": id, "title": title, "category": category, "target_minutes": minutes, "goal": resolveGoal(goal, minutes), "streak": streak, "best_streak": best, "consecutive_recoveries": consecutive, "completed_today": done})
 		}
 	}
 	c.JSON(200, gin.H{"habits": items})
@@ -32,17 +34,14 @@ func (a *App) habits(c *gin.Context) {
 
 func (a *App) createHabit(c *gin.Context) {
 	u, _ := a.current(c)
-	var v struct {
-		Title, Category string
-		TargetMinutes   int `json:"target_minutes"`
-	}
+	var v habitInput
 	if c.ShouldBindJSON(&v) != nil {
 		fail(c, 400, "Invalid habit")
 		return
 	}
 	v.Title = strings.TrimSpace(v.Title)
-	if len(v.Title) < 2 || len(v.Title) > 100 || v.TargetMinutes < 1 || v.TargetMinutes > 1440 {
-		fail(c, 400, "Please provide a title and goal in minutes (1–1440)")
+	if len(v.Title) < 2 || len(v.Title) > 100 || !v.normalizeGoal() {
+		fail(c, 400, "Enter a valid habit name and goal")
 		return
 	}
 	if v.Category == "" {
@@ -53,13 +52,13 @@ func (a *App) createHabit(c *gin.Context) {
 		return
 	}
 	id := newID()
-	_, err := a.DB.Exec(c.Request.Context(), `INSERT INTO habits(id,user_id,title,category,target_minutes) VALUES($1,$2,$3,$4,$5)`, id, u.ID, v.Title, v.Category, v.TargetMinutes)
+	_, err := a.DB.Exec(c.Request.Context(), `INSERT INTO habits(id,user_id,title,category,target_minutes,goal) VALUES($1,$2,$3,$4,$5,$6)`, id, u.ID, v.Title, v.Category, v.TargetMinutes, v.Goal)
 	if err != nil {
 		fail(c, 500, "Cannot save habit")
 		return
 	}
-	a.event(c.Request.Context(), u, "habit_created", gin.H{"habit_id": id, "category": v.Category})
-	c.JSON(201, gin.H{"id": id, "title": v.Title, "category": v.Category, "target_minutes": v.TargetMinutes, "streak": 0})
+	a.event(c.Request.Context(), u, "habit_created", gin.H{"habit_id": id, "category": v.Category, "goal_type": v.Goal.Type})
+	c.JSON(201, gin.H{"id": id, "title": v.Title, "category": v.Category, "target_minutes": v.TargetMinutes, "goal": v.Goal, "streak": 0})
 }
 
 func (a *App) deleteHabit(c *gin.Context) {
@@ -86,7 +85,8 @@ func (a *App) completeHabit(c *gin.Context) {
 	}
 	defer tx.Rollback(ctx)
 	var streak, targetMinutes int
-	err = tx.QueryRow(ctx, `SELECT streak_count, target_minutes FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&streak, &targetMinutes)
+	var storedGoal *HabitGoal
+	err = tx.QueryRow(ctx, `SELECT streak_count, target_minutes, goal FROM habits WHERE id=$1 AND user_id=$2 AND NOT archived FOR UPDATE`, c.Param("id"), u.ID).Scan(&streak, &targetMinutes, &storedGoal)
 	if err != nil {
 		fail(c, 404, "Habit not found")
 		return
@@ -123,7 +123,9 @@ func (a *App) completeHabit(c *gin.Context) {
 		nextStreak = streak + 1
 	}
 
-	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes) VALUES($1,$2,$3,$4::date,'full',$5)`, newID(), u.ID, c.Param("id"), today, targetMinutes)
+	goal := resolveGoal(storedGoal, targetMinutes)
+	goal.MicroQuest = ""
+	_, err = tx.Exec(ctx, `INSERT INTO habit_logs(id,user_id,habit_id,log_date,kind,minutes,goal) VALUES($1,$2,$3,$4::date,'full',$5,$6)`, newID(), u.ID, c.Param("id"), today, goal.minutes(), goal)
 	if err != nil {
 		fail(c, 500, "Could not record completion")
 		return
@@ -142,7 +144,7 @@ func (a *App) completeHabit(c *gin.Context) {
 		fail(c, 500, "Could not save")
 		return
 	}
-	a.event(ctx, u, "habit_completed", gin.H{"habit_id": c.Param("id"), "xp_awarded": 20})
+	a.event(ctx, u, "habit_completed", gin.H{"habit_id": c.Param("id"), "goal_type": goal.Type, "xp_awarded": 20})
 	c.JSON(200, gin.H{"ok": true, "streak": nextStreak, "xp_awarded": 20})
 }
 
@@ -197,22 +199,23 @@ func (a *App) undoCompleteHabit(c *gin.Context) {
 		return
 	}
 
-	// Remove today's ordinary completion.
-	cmd, err := tx.Exec(ctx, `
+	// Remove today's ordinary completion and retain its original goal type for analytics.
+	var goalType string
+	err = tx.QueryRow(ctx, `
         DELETE FROM habit_logs
         WHERE habit_id=$1
           AND user_id=$2
           AND log_date=$3::date
           AND kind='full'
-    `, habitID, u.ID, today)
+        RETURNING COALESCE(goal->>'type', 'minutes')
+    `, habitID, u.ID, today).Scan(&goalType)
 
-	if err != nil {
-		fail(c, 500, "Could not undo completion")
+	if err == pgx.ErrNoRows {
+		fail(c, 409, "No completion to undo today")
 		return
 	}
-
-	if cmd.RowsAffected() == 0 {
-		fail(c, 409, "No completion to undo today")
+	if err != nil {
+		fail(c, 500, "Could not undo completion")
 		return
 	}
 
@@ -248,6 +251,7 @@ func (a *App) undoCompleteHabit(c *gin.Context) {
 	a.event(ctx, u, "habit_completion_undone", gin.H{
 		"habit_id":    habitID,
 		"xp_reversed": 20,
+		"goal_type":   goalType,
 	})
 
 	c.JSON(200, gin.H{

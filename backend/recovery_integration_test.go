@@ -89,6 +89,10 @@ func TestRecoveryPostgres(t *testing.T) {
 	router := gin.New()
 	router.Use(func(c *gin.Context) { c.Set("user", user) })
 	router.GET("/habits", app.habits)
+	router.POST("/habits", app.createHabit)
+	router.PATCH("/habits/:id", app.updateHabit)
+	router.POST("/habits/:id/complete", app.completeHabit)
+	router.DELETE("/habits/:id/complete", app.undoCompleteHabit)
 	router.POST("/habits/:id/report-miss", app.reportMiss)
 	router.POST("/recoveries/:id/:action", func(c *gin.Context) { app.recoveryAction(c, c.Param("action")) })
 	call := func(method, path, body string, expected int) *httptest.ResponseRecorder {
@@ -168,4 +172,47 @@ func TestRecoveryPostgres(t *testing.T) {
 	if eligible7d != 1 || returned7d != 0 {
 		t.Fatalf("late G1 return counted: eligible=%d returned=%d", eligible7d, returned7d)
 	}
+	t.Run("typed goals and recovery history", func(t *testing.T) {
+		var habit struct {
+			ID   string
+			Goal HabitGoal
+		}
+		path := "/habits"
+		res := call(http.MethodPost, path, `{"title":"Daily squats","category":"Fitness","goal":{"type":"repetitions","amount":10,"unit":"squats"}}`, 201)
+		if err := json.Unmarshal(res.Body.Bytes(), &habit); err != nil || habit.Goal.Type != "repetitions" || habit.Goal.Amount != 10 {
+			t.Fatalf("invalid repetition goal response: %s", res.Body)
+		}
+		path += "/" + habit.ID
+		exec(`UPDATE habits SET streak_count=12, best_streak=12, created_at=now()-interval '15 days' WHERE id=$1`, habit.ID)
+		res = call(http.MethodPost, path+"/report-miss", string(reportBody), 201)
+		var recovery struct {
+			ID    string
+			Goals RecoveryGoals
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &recovery); err != nil || recovery.Goals.Micro.Amount != 3 || recovery.Goals.Step.Amount != 5 {
+			t.Fatalf("invalid repetition recovery response: %s", res.Body)
+		}
+		for _, step := range []string{"accept", "micro", "step", "original"} {
+			call(http.MethodPost, "/recoveries/"+recovery.ID+"/"+step, `{"confirmed":true}`, 200)
+		}
+		call(http.MethodPatch, path, `{"title":"Prepare my bag","category":"Other","goal":{"type":"action","micro_quest":"Put in one notebook."}}`, 200)
+		var count, minutes int
+		var goalType string
+		if err := db.QueryRow(ctx, `SELECT goal->>'type', (goal->>'amount')::int, minutes FROM habit_logs WHERE habit_id=$1 AND kind='full'`, habit.ID).
+			Scan(&goalType, &count, &minutes); err != nil || goalType != "repetitions" || count != 10 || minutes != 0 {
+			t.Fatalf("historic goal changed: %s %d, minutes=%d, err=%v", goalType, count, minutes, err)
+		}
+
+		habit.Goal = HabitGoal{}
+		res = call(http.MethodPost, "/habits", `{"title":"Prepare my bag","category":"Other","goal":{"type":"action"}}`, 201)
+		if err := json.Unmarshal(res.Body.Bytes(), &habit); err != nil || habit.Goal.Type != "action" {
+			t.Fatalf("invalid action goal response: %s", res.Body)
+		}
+		path = "/habits/" + habit.ID + "/complete"
+		call(http.MethodPost, path, "", 200)
+		call(http.MethodPost, path, "", 409)
+		call(http.MethodDelete, path, "", 200)
+		call(http.MethodDelete, path, "", 409)
+	})
+
 }
